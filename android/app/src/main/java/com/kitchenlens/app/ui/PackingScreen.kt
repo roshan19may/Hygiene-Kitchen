@@ -15,7 +15,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Videocam
@@ -164,16 +165,24 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             // ---- draft status + New order ----
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Card(
+                Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         if (savedAt > 0) "Draft saved ${timeAgo(savedAt)}. You can leave and continue later from Home."
-                        else "New order. Use \"Save draft\" to keep progress and continue later.",
+                        else "Fill in the order below. Use \"Save draft\" to keep progress and continue later.",
                         style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = { confirmNew = true }, enabled = !working) {
-                        Icon(Icons.Filled.AddCircle, null); Spacer(Modifier.size(4.dp)); Text("New order")
+                    Button(
+                        onClick = { confirmNew = true },
+                        enabled = !working,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Chilli, contentColor = Color.White),
+                    ) {
+                        Icon(Icons.Filled.RestartAlt, null); Spacer(Modifier.size(8.dp))
+                        Text("New order (reset all fields)", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -193,7 +202,13 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
                     ChipPicker("Food type", listOf("Hot", "Cold"), foodType, multi = false) { foodType = it }
                     OutlinedTextField(
                         tempText, { tempText = it.filter { c -> c.isDigit() || c == '.' || c == ',' || c == '-' }.take(5) },
-                        label = { Text("Probe reading in °C") }, singleLine = true,
+                        label = { Text("Temperature shown on the probe (°C)") }, singleLine = true,
+                        supportingText = {
+                            Text(
+                                if (foodType.first() == "Cold") "Enter the reading shown. Guideline: cold food at 5°C or below."
+                                else "Enter the reading shown. Guideline: hot food at least 50°C."
+                            )
+                        },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -203,9 +218,9 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
                             Spacer(Modifier.size(8.dp))
                             Text(
                                 when {
-                                    tempOk -> "Safe temperature"
-                                    foodType.first() == "Hot" -> "Below 60°C: reheat before packing. Customers will see this reading."
-                                    else -> "Above 5°C: chill before packing. Customers will see this reading."
+                                    tempOk -> "Meets the guideline"
+                                    foodType.first() == "Hot" -> "Below the 50°C guideline. You can still save it; customers see the reading you enter."
+                                    else -> "Above the 5°C guideline. You can still save it; customers see the reading you enter."
                                 },
                                 color = if (tempOk) Ok else Chilli,
                             )

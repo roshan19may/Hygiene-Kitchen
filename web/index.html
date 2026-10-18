@@ -215,6 +215,12 @@ a { color: var(--leaf); font-weight: 700; }
     var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
     return new Response(stream).text().then(JSON.parse);
   }
+  /* Media stored in the kitchen's free Cloudinary account; the QR carries only IDs */
+  function cloudUrl(cl, id, video) {
+    if (!cl || !id) return "";
+    var base = "https://res.cloudinary.com/" + encodeURIComponent(cl) + (video ? "/video/upload/q_auto/" : "/image/upload/f_auto,q_auto,w_900/");
+    return base + String(id).split("/").map(encodeURIComponent).join("/") + (video ? ".mp4" : "");
+  }
   function fromOffline(p) {
     var packed = (p.pt || 0) * 60000, snap = {};
     (p.r || []).forEach(function (r, i) {
@@ -223,12 +229,14 @@ a { color: var(--leaf); font-weight: 700; }
       else if (c === "S") { label = "Staff hygiene check"; type = "video"; }
       else if (c === "P") { label = "Pest control service"; type = "photo"; }
       else { label = c.slice(1) + " received"; type = "photo"; }
-      snap["r" + i] = { at: packed - (r[1] || 0) * 60000, label: label, mediaType: type, mediaUrl: "", details: { note: r[2] } };
+      var urls = (r[3] || []).map(function (id) { return cloudUrl(p.cl, id, type === "video"); }).filter(Boolean);
+      snap["r" + i] = { at: packed - (r[1] || 0) * 60000, label: label, mediaType: type, mediaUrl: urls[0] || "", mediaUrls: urls, details: { note: r[2] } };
     });
     return {
       offline: true, kitchenName: p.k, kitchenLocality: p.a, kitchenCity: "", fssai: p.f, gstin: p.g,
       platform: p.p, orderRef: p.o, packerName: p.n, foodType: p.ft === "C" ? "Cold" : "Hot",
-      tempC: p.t, tempOk: !!p.tk, score: p.s, packedAtMillis: packed, clipUrl: "", snapshot: snap
+      tempC: p.t, tempOk: !!p.tk, score: p.s, packedAtMillis: packed, clipUrl: cloudUrl(p.cl, p.c, true), snapshot: snap,
+      hasCloud: !!(p.cl && p.c)
     };
   }
 
@@ -304,8 +312,8 @@ a { color: var(--leaf); font-weight: 700; }
         : "Clip not available") + "</div>";
 
     var tempTone = o.tempOk ? "ok" : "bad";
-    var tempNote = o.tempOk ? (o.foodType === "Cold" ? "Kept cold (5°C or below)" : "Hot and safe (60°C or above)")
-      : (o.foodType === "Cold" ? "Warmer than 5°C at packing" : "Below 60°C at packing");
+    var tempNote = o.tempOk ? (o.foodType === "Cold" ? "Kept cold (5°C or below)" : "Hot (50°C or above)")
+      : (o.foodType === "Cold" ? "Warmer than 5°C at packing" : "Below the 50°C guideline at packing");
 
     var timeline = rows.map(function (r, i) {
       return '<li><div class="rail"><span class="dot"></span></div><div class="entry">' +
@@ -353,7 +361,7 @@ a { color: var(--leaf); font-weight: 700; }
         b.querySelector(".act").textContent = open ? "Hide" : (rows[i].mediaType === "video" ? "Watch" : "View");
       });
     });
-    if (o.offline) {
+    if (o.offline && !o.hasCloud) {
       app.insertAdjacentHTML("afterbegin", '<div class="demo">Order details below were saved inside this seal. Photos and clips are kept on the kitchen\'s phone until it connects cloud storage.</div>');
     }
     document.title = o.kitchenName ? o.kitchenName + " · Seal " + code : "KitchenLens Seal";

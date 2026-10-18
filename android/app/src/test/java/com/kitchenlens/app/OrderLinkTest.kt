@@ -60,4 +60,20 @@ class OrderLinkTest {
         assertTrue(url.startsWith("https://example.github.io/Hygiene-Kitchen/?c=AB12CD34&d=z"))
         assertTrue("QR link too long: ${url.length}", url.length < 700)
     }
+
+    @Test fun offlineSealCarriesCloudMediaIds() {
+        @Suppress("UNCHECKED_CAST")
+        val base = order()
+        val snap = (base["snapshot"] as Map<String, Map<String, Any?>>).mapValues { (k, e) ->
+            e + ("cloudIds" to if (k == "INV_MEAT___FISH") listOf("klab12cd34", "klzz99yy88") else listOf("kl" + k.take(6).lowercase()))
+        }
+        val withCloud = base + mapOf("snapshot" to snap, "cloudName" to "demo-kitchen", "clipCloudId" to "klpack1234")
+        val json = OfflineSeal.compactJson(withCloud)
+        listOf("\"cl\":\"demo-kitchen\"", "\"c\":\"klpack1234\"",
+            "[\"IMeat & Fish\",330,\"2 photos, bill 16-10-2026, GST\",[\"klab12cd34\",\"klzz99yy88\"]]",
+            "[\"U\",125,\"Detergent, Hot water\",[\"klutensi\"]]",
+        ).forEach { assertTrue("missing $it in $json", json.contains(it)) }
+        val url = OfflineSeal.url("https://example.github.io/Hygiene-Kitchen/?c=", "AB12CD34", withCloud)
+        assertTrue("QR link too long: ${url.length}", url.length < 800)
+    }
 }

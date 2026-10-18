@@ -2,6 +2,7 @@ package com.kitchenlens.app.data
 
 import android.content.Context
 import android.net.Uri
+import com.kitchenlens.app.util.CloudMedia
 import com.kitchenlens.app.util.HygieneScore
 import com.kitchenlens.app.util.QrLabel
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +26,26 @@ class LocalRepository(context: Context) : KitchenRepository {
     private val state: JSONObject =
         if (stateFile.exists()) JSONObject(stateFile.readText()) else JSONObject()
     private val kitchenFlow = MutableStateFlow<Kitchen?>(null)
+
+    /** Optional free cloud storage so photos and clips show when a seal is scanned. */
+    val cloud = CloudMedia(context)
+
+    /** Best-effort early upload, so creating the QR later is quick. Errors are retried at QR time. */
+    private suspend fun preUpload(urls: List<String>, video: Boolean) {
+        if (!cloud.isConfigured) return
+        urls.forEach { u -> runCatching { cloud.ensureUploaded(u, video) } }
+    }
+
+    /** Adds Cloudinary IDs to every photo/clip in the hygiene snapshot (uploads what's missing). */
+    private suspend fun withCloudIds(latest: Map<String, Map<String, Any?>>, onStep: () -> Unit): Map<String, Map<String, Any?>> =
+        latest.mapValues { (_, e) ->
+            @Suppress("UNCHECKED_CAST")
+            val urls = (e["mediaUrls"] as? List<*>)?.filterIsInstance<String>()?.takeIf { it.isNotEmpty() }
+                ?: listOfNotNull(e["mediaUrl"] as? String)
+            val video = e["mediaType"] == MediaType.VIDEO.value
+            val ids = urls.map { u -> cloud.ensureUploaded(u, video).also { onStep() } }
+            e + ("cloudIds" to ids)
+        }
 
     override val isDemo = true
 
@@ -99,6 +120,7 @@ class LocalRepository(context: Context) : KitchenRepository {
         photoHash: String?, onProgress: (Float) -> Unit,
     ) = withContext(Dispatchers.IO) {
         val mediaUrl = copyIn(media, if (mediaType == MediaType.VIDEO) "mp4" else "jpg")
+        preUpload(listOf(mediaUrl), mediaType == MediaType.VIDEO)
         onProgress(1f)
         val now = System.currentTimeMillis()
         commit(
@@ -117,6 +139,7 @@ class LocalRepository(context: Context) : KitchenRepository {
     ) = withContext(Dispatchers.IO) {
         val photoUrls = photos.mapValues { (_, list) -> list.map { copyIn(it.file, "jpg") } }
         val billUrls = bills.map { copyIn(it.file, "jpg") }
+        preUpload(photoUrls.values.flatten(), video = false)
         onProgress(1f)
         val now = System.currentTimeMillis()
         val records = buildInventoryRecords(photoUrls, bills, billUrls, supplierType)
@@ -140,12 +163,24 @@ class LocalRepository(context: Context) : KitchenRepository {
         findOrderCode(platform, orderRef)?.let { throw DuplicateOrderException(it, platform, orderRef) }
         val code = QrLabel.newCode()
         val clipUrl = copyIn(clip, "mp4")
-        onProgress(1f)
-        val fresh = getKitchen(kitchen.id)
+        var fresh = getKitchen(kitchen.id)
         val now = System.currentTimeMillis()
         val tempOk = HygieneScore.temperatureOk(foodType, tempC)
         val score = HygieneScore.compute(fresh.latest, tempOk, now)
-        val record = buildOrderRecord(fresh, platform, orderRef, packerName, foodType, tempC, tempOk, clipUrl, now, score)
+        var cloudExtras = emptyMap<String, Any?>()
+        if (cloud.isConfigured) {
+            // Upload the packing clip and any not-yet-uploaded hygiene photos/clips
+            val total = 1 + fresh.latest.values.sumOf { e ->
+                ((e["mediaUrls"] as? List<*>)?.size?.takeIf { it > 0 } ?: 1)
+            }
+            var done = 0
+            val step = { done++; onProgress(done.toFloat() / total) }
+            val clipId = cloud.ensureUploaded(clipUrl, video = true).also { step() }
+            fresh = fresh.copy(latest = withCloudIds(fresh.latest) { step() })
+            cloudExtras = mapOf("cloudName" to cloud.cloudName, "clipCloudId" to clipId)
+        }
+        onProgress(1f)
+        val record = buildOrderRecord(fresh, platform, orderRef, packerName, foodType, tempC, tempOk, clipUrl, now, score) + cloudExtras
         val orders = state.optJSONObject("orders") ?: JSONObject()
         orders.put(code, toJson(record))
         state.put("orders", orders)
@@ -154,6 +189,31 @@ class LocalRepository(context: Context) : KitchenRepository {
         state.put("orderRefs", refs)
         save()
         orderSummaryFromMap(code, record)
+    }
+
+    /**
+     * For a seal created before cloud storage was connected: uploads its photos and
+     * clips now and returns the updated order, so a fresh QR can be printed.
+     */
+    @Suppress("UNCHECKED_CAST")
+    suspend fun attachCloudMedia(code: String, onProgress: (Float) -> Unit): Map<String, Any?> = withContext(Dispatchers.IO) {
+        require(cloud.isConfigured) { "Connect cloud storage in Kitchen details first." }
+        val o = getOrder(code) ?: error("Order not found on this phone.")
+        val snapshot = (o["snapshot"] as? Map<String, Map<String, Any?>>) ?: emptyMap()
+        val total = 1 + snapshot.values.sumOf { e -> ((e["mediaUrls"] as? List<*>)?.size?.takeIf { it > 0 } ?: 1) }
+        var done = 0
+        val step = { done++; onProgress(done.toFloat() / total) }
+        val clipId = cloud.ensureUploaded(o["clipUrl"] as? String ?: error("Packing clip missing"), video = true).also { step() }
+        val updated = o + mapOf(
+            "snapshot" to withCloudIds(snapshot) { step() },
+            "cloudName" to cloud.cloudName,
+            "clipCloudId" to clipId,
+        )
+        val orders = state.optJSONObject("orders") ?: JSONObject()
+        orders.put(code, toJson(updated))
+        state.put("orders", orders)
+        save()
+        updated
     }
 
     override suspend fun findOrderCode(platform: String, orderRef: String): String? {

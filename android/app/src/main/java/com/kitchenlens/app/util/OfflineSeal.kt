@@ -10,7 +10,8 @@ import java.util.zip.Deflater
  * (kitchen, order number, temperature, score, hygiene timeline) without a server.
  *
  * Photos and videos are far too large for a QR code (a 20 s clip is ~4 MB; a QR
- * holds under 3 KB), so they appear only once Firebase cloud storage is connected.
+ * holds under 3 KB). When free cloud storage is connected ([CloudMedia]), the QR
+ * carries only their short IDs and the scan page loads them from the cloud.
  */
 object OfflineSeal {
 
@@ -50,8 +51,9 @@ object OfflineSeal {
                 key.startsWith("INV_") -> "I" + ((d["category"] as? String) ?: key.removePrefix("INV_"))
                 else -> return@mapNotNull null
             }
-            Triple(code, (packedAt - at) / 60_000, rowDetail(code, d))
-        }.sortedBy { it.second }
+            val ids = (e["cloudIds"] as? List<*>)?.filterIsInstance<String>().orEmpty()
+            Row(code, (packedAt - at) / 60_000, rowDetail(code, d), ids)
+        }.sortedBy { it.minutes }
 
         val sb = StringBuilder("{")
         fun field(name: String, value: Any?) {
@@ -77,14 +79,21 @@ object OfflineSeal {
         field("tk", o["tempOk"] as? Boolean ?: false)
         field("s", o["score"] as? Number)
         field("pt", packedAt / 60_000)
+        // Cloud storage (optional): account name + packing clip ID; photo/clip IDs go in each row
+        field("cl", o["cloudName"])
+        field("c", o["clipCloudId"])
         sb.append(",\"r\":[")
-        rows.forEachIndexed { i, (c, m, det) ->
+        rows.forEachIndexed { i, r ->
             if (i > 0) sb.append(',')
-            sb.append('[').append(str(c)).append(',').append(m).append(',').append(str(det)).append(']')
+            sb.append('[').append(str(r.code)).append(',').append(r.minutes).append(',').append(str(r.detail))
+            if (r.ids.isNotEmpty()) sb.append(",[").append(r.ids.joinToString(",") { str(it) }).append(']')
+            sb.append(']')
         }
         sb.append("]}")
         return sb.toString()
     }
+
+    private data class Row(val code: String, val minutes: Long, val detail: String, val ids: List<String>)
 
     private fun rowDetail(code: String, d: Map<*, *>): String {
         fun s(k: String) = (d[k] as? String)?.takeIf { it.isNotBlank() }

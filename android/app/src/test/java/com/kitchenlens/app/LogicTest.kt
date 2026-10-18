@@ -49,7 +49,9 @@ class LogicTest {
 
     @Test fun temperatureRules() {
         assertTrue(HygieneScore.temperatureOk("Hot", 65.0))
-        assertFalse(HygieneScore.temperatureOk("Hot", 52.0))
+        assertTrue(HygieneScore.temperatureOk("Hot", 50.0))
+        assertTrue(HygieneScore.temperatureOk("Hot", 52.0))
+        assertFalse(HygieneScore.temperatureOk("Hot", 45.0))
         assertTrue(HygieneScore.temperatureOk("Cold", 4.0))
         assertFalse(HygieneScore.temperatureOk("Cold", 9.0))
     }

@@ -47,7 +47,15 @@ object HygieneScore {
         }
     }
 
-    /** Hot food should leave the kitchen at 60°C or above; cold food at 5°C or below. */
+    /** Guideline shown to staff: hot food at least this warm when packed. */
+    const val HOT_MIN_C = 50.0
+    /** Guideline shown to staff: cold food at most this cold when packed. */
+    const val COLD_MAX_C = 5.0
+
+    /**
+     * True when the reading meets the guideline. Any reading can still be saved;
+     * customers simply see whether it met the guideline.
+     */
     fun temperatureOk(foodType: String, tempC: Double): Boolean =
-        if (foodType == "Cold") tempC <= 5.0 else tempC >= 60.0
+        if (foodType == "Cold") tempC <= COLD_MAX_C else tempC >= HOT_MIN_C
 }

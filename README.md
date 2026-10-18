@@ -33,6 +33,22 @@ phone. You can try the full flow: set up a kitchen, record the four hygiene sect
 pack an order, and print or share the QR seal. Use **Preview what the customer sees**
 to see the customer page inside the app.
 
+### Show photos and clips on scanned seals (free, about 5 minutes)
+
+A QR code holds under 3 KB, so photos and clips can't live inside it. In demo mode the app
+uploads them to the kitchen's own free Cloudinary account and the QR carries only short IDs.
+
+1. Create a free account at <https://cloudinary.com> (no card needed) and note the **Cloud name**
+   on the dashboard.
+2. In Cloudinary: **Settings → Upload → Upload presets → Add upload preset**, set
+   **Signing mode: Unsigned**, save, and note the preset name.
+3. In the app: **shop icon (Kitchen details) → Photos and clips on scanned seals**, enter both,
+   tap **Test and save**.
+
+From then on, hygiene photos and clips upload when saved, and each new seal links to them.
+For a seal made before connecting, open it from **Recent orders** and tap
+**Upload photos and clips, then refresh this QR**, then reprint it.
+
 ### Make the QR codes scannable (optional, 2 minutes)
 
 On a free GitHub plan, Pages only works for **public** repositories: either make the
@@ -102,7 +118,8 @@ GST number (GSTIN, optional, format-checked). Customers see FSSAI and GSTIN on e
 | Pest control | Photo of service report, vendor, service date, next due | Vendor and next due date |
 
 **Per order (about 30 seconds):** tap **New order + QR seal**, choose the platform, enter the
-**platform order number** (required except for direct orders), the probe temperature, and record a
+**platform order number** (required except for direct orders), the temperature shown on the probe
+(guideline: hot food at least 50°C, cold food 5°C or below; any reading can be saved), and record a
 5–20 s packing clip, then tap **Create QR seal**. Share the label image to a Bluetooth
 thermal-printer app (58 mm labels) and stick it across the bag opening.
 

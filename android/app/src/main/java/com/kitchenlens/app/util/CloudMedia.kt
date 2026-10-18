@@ -1,0 +1,114 @@
+package com.kitchenlens.app.util
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.net.Uri
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.io.DataOutputStream
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.security.SecureRandom
+
+/**
+ * Free cloud storage for photos and clips in demo mode, using the kitchen's own
+ * Cloudinary account (free plan, no card). A QR code can't hold media, so each
+ * file is uploaded once and the QR carries only its short ID.
+ *
+ * Setup in Cloudinary: Settings > Upload > Upload presets > Add, Signing mode "Unsigned".
+ * Then enter the cloud name and preset name in the app (Kitchen details).
+ */
+class CloudMedia(context: Context) {
+    private val prefs = context.getSharedPreferences("cloud_media", Context.MODE_PRIVATE)
+    private val cacheDir = context.cacheDir
+
+    val cloudName: String get() = prefs.getString("cloudName", "").orEmpty()
+    val preset: String get() = prefs.getString("preset", "").orEmpty()
+    val isConfigured: Boolean get() = cloudName.isNotBlank() && preset.isNotBlank()
+
+    fun saveSettings(cloudName: String, preset: String) {
+        prefs.edit().putString("cloudName", cloudName.trim()).putString("preset", preset.trim()).apply()
+    }
+
+    /** ID already uploaded for this local file, if any. */
+    fun cachedId(localUrl: String): String? = prefs.getString("id:$localUrl", null)
+
+    /**
+     * Uploads a local file (path or file:// URL) once and returns its Cloudinary ID.
+     * Later calls for the same file return the cached ID without uploading again.
+     */
+    suspend fun ensureUploaded(localUrl: String, video: Boolean): String {
+        cachedId(localUrl)?.let { return it }
+        val path = if (localUrl.startsWith("file:")) Uri.parse(localUrl).path.orEmpty() else localUrl
+        val file = File(path)
+        require(file.exists()) { "A photo or clip is missing from this phone. Please record it again." }
+        val id = upload(file, video)
+        prefs.edit().putString("id:$localUrl", id).apply()
+        return id
+    }
+
+    /** Uploads a tiny test image to check the cloud name and preset. */
+    suspend fun testConnection(cloudName: String, preset: String): String {
+        val f = File(cacheDir, "kl_test.png")
+        withContext(Dispatchers.IO) {
+            val bmp = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888)
+            bmp.eraseColor(0xFF0F5C4A.toInt())
+            f.outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        return upload(f, video = false, cloud = cloudName.trim(), uploadPreset = preset.trim())
+    }
+
+    private suspend fun upload(
+        file: File, video: Boolean, cloud: String = cloudName, uploadPreset: String = preset,
+    ): String = withContext(Dispatchers.IO) {
+        require(cloud.isNotBlank() && uploadPreset.isNotBlank()) { "Cloud storage is not set up" }
+        val boundary = "----kitchenlens" + System.currentTimeMillis()
+        val endpoint = "https://api.cloudinary.com/v1_1/$cloud/${if (video) "video" else "image"}/upload"
+        val conn = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            doOutput = true
+            connectTimeout = 20_000
+            readTimeout = 120_000
+            setChunkedStreamingMode(64 * 1024)
+            setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+        }
+        try {
+            DataOutputStream(conn.outputStream).use { out ->
+                fun field(name: String, value: String) {
+                    out.writeBytes("--$boundary\r\nContent-Disposition: form-data; name=\"$name\"\r\n\r\n$value\r\n")
+                }
+                field("upload_preset", uploadPreset)
+                field("public_id", "kl" + shortId())
+                out.writeBytes("--$boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"${file.name}\"\r\n")
+                out.writeBytes("Content-Type: ${if (video) "video/mp4" else if (file.name.endsWith(".png")) "image/png" else "image/jpeg"}\r\n\r\n")
+                file.inputStream().use { it.copyTo(out, 64 * 1024) }
+                out.writeBytes("\r\n--$boundary--\r\n")
+            }
+            val code = conn.responseCode
+            val body = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
+            val json = runCatching { JSONObject(body) }.getOrNull()
+            if (code !in 200..299) {
+                val msg = json?.optJSONObject("error")?.optString("message").orEmpty()
+                error(
+                    when {
+                        code == 401 || msg.contains("preset", ignoreCase = true) ->
+                            "Cloud storage rejected the upload preset. Check it exists and is set to Unsigned."
+                        code == 404 -> "Cloud name not found. Check the cloud name in Kitchen details."
+                        else -> "Upload failed ($code) ${msg.take(120)}"
+                    }
+                )
+            }
+            json?.optString("public_id")?.takeIf { it.isNotBlank() } ?: error("Upload failed: no file ID returned")
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    companion object {
+        private const val CHARS = "abcdefghijkmnpqrstuvwxyz23456789"
+        private val random = SecureRandom()
+        fun shortId(): String = buildString { repeat(8) { append(CHARS[random.nextInt(CHARS.length)]) } }
+    }
+}

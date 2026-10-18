@@ -36,6 +36,7 @@ import com.kitchenlens.app.data.TIERS
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kitchenlens.app.data.LocalRepository
 import com.kitchenlens.app.data.profileMap
 import com.kitchenlens.app.util.Gstin
 import kotlinx.coroutines.launch
@@ -44,7 +45,8 @@ import kotlinx.coroutines.launch
 fun DemoBanner() {
     Card(colors = CardDefaults.cardColors(containerColor = Turmeric.copy(alpha = 0.25f))) {
         Text(
-            "Demo mode: data stays on this phone. Connect Firebase (see README) so customers can scan QR codes.",
+            "Demo mode: records are kept on this phone. To show photos and clips when customers scan a seal, " +
+                "connect free cloud storage in Kitchen details (shop icon).",
             modifier = Modifier.padding(12.dp),
             style = MaterialTheme.typography.bodySmall,
         )
@@ -206,6 +208,7 @@ fun EditKitchenScreen(vm: AppViewModel, onDone: () -> Unit, onBack: () -> Unit) 
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Changes appear on QR seals printed from now on.", style = MaterialTheme.typography.bodySmall)
+            (vm.repo as? LocalRepository)?.let { CloudStorageCard(it.cloud) }
             KitchenProfileFields(form)
             ErrorText(error)
             Button(

@@ -112,6 +112,7 @@ private fun MainNav(vm: AppViewModel, kitchenId: String) {
                 onPreview = { nav.navigate("preview/$code") },
                 onPackNext = { nav.navigate("pack") { popUpTo("home") } },
                 onHome = { nav.popBackStack("home", inclusive = false) },
+                onSetupCloud = { nav.navigate("kitchen") },
             )
         }
         composable("orders") {

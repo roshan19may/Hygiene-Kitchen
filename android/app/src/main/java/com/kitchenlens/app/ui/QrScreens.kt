@@ -44,7 +44,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kitchenlens.app.AppViewModel
 import com.kitchenlens.app.BuildConfig
+import com.kitchenlens.app.data.LocalRepository
 import com.kitchenlens.app.data.OrderSummary
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import com.kitchenlens.app.util.OfflineSeal
 import com.kitchenlens.app.util.QrLabel
 import androidx.compose.material3.OutlinedTextField
@@ -58,10 +63,14 @@ fun QrResultScreen(
     onPreview: () -> Unit,
     onPackNext: () -> Unit,
     onHome: () -> Unit,
+    onSetupCloud: () -> Unit,
 ) {
     val context = LocalContext.current
     var order by remember { mutableStateOf<Map<String, Any?>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var uploading by remember { mutableStateOf(false) }
+    var uploadProgress by remember { mutableFloatStateOf(0f) }
+    val scope = rememberCoroutineScope()
     LaunchedEffect(code) {
         order = runCatching { vm.repo.getOrder(code) }.onFailure { error = it.message }.getOrNull()
     }
@@ -94,11 +103,34 @@ fun QrResultScreen(
             if (orderLine != null) Text(orderLine, fontWeight = FontWeight.SemiBold)
             Text(scanUrl(code), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
             if (vm.repo.isDemo) {
+                val hasMedia = o?.get("clipCloudId") != null
+                val local = vm.repo as? LocalRepository
                 Text(
-                    "Demo mode: this QR carries the order details (kitchen, order number, temperature, score and hygiene timeline). " +
-                        "Photos and clips appear on the customer page once Firebase cloud storage is connected (README, section 2).",
+                    if (hasMedia) "This QR carries the order details and links to its photos and clips in your cloud storage."
+                    else "This QR carries the order details. Photos and clips will NOT show when scanned until you connect " +
+                        "free cloud storage in Kitchen details (shop icon on Home), then create the seal again.",
                     style = MaterialTheme.typography.bodySmall,
+                    color = if (hasMedia) Ok else Chilli,
                 )
+                if (!hasMedia && local != null) {
+                    if (local.cloud.isConfigured) {
+                        OutlinedButton(
+                            enabled = !uploading,
+                            onClick = {
+                                uploading = true; error = null
+                                scope.launch {
+                                    try { order = local.attachCloudMedia(code) { uploadProgress = it } }
+                                    catch (e: Exception) { error = e.message }
+                                    finally { uploading = false }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(if (uploading) "Uploading photos and clips…" else "Upload photos and clips, then refresh this QR") }
+                        if (uploading) LinearProgressIndicator(progress = { uploadProgress }, modifier = Modifier.fillMaxWidth())
+                    } else {
+                        OutlinedButton(onClick = onSetupCloud, modifier = Modifier.fillMaxWidth()) { Text("Set up free cloud storage") }
+                    }
+                }
             }
             Button(onClick = { QrLabel.share(context, label, code) }, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Filled.Print, null); Spacer(Modifier.size(8.dp)); Text("Print / share seal")
@@ -106,7 +138,7 @@ fun QrResultScreen(
             OutlinedButton(onClick = onPreview, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Filled.Visibility, null); Spacer(Modifier.size(8.dp)); Text("Preview what the customer sees")
             }
-            Button(onClick = onPackNext, modifier = Modifier.fillMaxWidth()) { Text("Pack next order") }
+            Button(onClick = onPackNext, modifier = Modifier.fillMaxWidth()) { Text("New order") }
             TextButton(onClick = onHome) { Text("Back to home") }
             Text(
                 "Stick the seal across the bag opening so it tears if the bag is opened.",
