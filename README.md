@@ -108,14 +108,14 @@ Install the new APK. It now uses real logins and real cloud storage, and QR code
 **Kitchen details** (shop icon on the Home screen): name, locality, FSSAI number and
 GST number (GSTIN, optional, format-checked). Customers see FSSAI and GSTIN on every seal.
 
-**Daily hygiene proof (Home screen)**
+**Kitchen Hygiene proof (Home screen)**
 
 | Section | Captured | Customer sees |
 |---|---|---|
-| Food inventory arrival | Several categories at once, up to 6 live photos per category; optional supplier bills (one bill can cover some or all categories), with date and supplier GSTIN read automatically | All photos per category, how long before packing it arrived, latest bill date, "GST-registered supplier" (bill photos and supplier GSTINs stay private) |
-| Utensil cleaning | 5–20 s clip, cleaning medium, shift | Clip and cleaning medium |
-| Staff cooking hygiene | 5–20 s clip, checklist (hand-wash, cap, gloves…), shift | Clip, checks done, checks **not** done |
-| Pest control | Photo of service report, vendor, service date, next due | Vendor and next due date |
+| Food inventory details | Several categories at once, up to 6 live photos per category; optional supplier bills (one bill can cover some or all categories), with date and supplier GSTIN read automatically | All photos per category, how long before packing it arrived, latest bill date, "GST-registered supplier" (bill photos and supplier GSTINs stay private) |
+| Cooking Utensils cleaning details | 5–20 s clip, cleaning medium, shift | Clip and cleaning medium |
+| Chef, Support staff cooking hygiene | 5–20 s clip, checklist (hand-wash, cap, gloves…), shift | Clip, checks done, checks **not** done |
+| Pest control details | Photo of service report, vendor, service date, next due | Vendor and next due date |
 
 **Per order (about 30 seconds):** tap **New order + QR seal**, choose the platform, enter the
 **platform order number** (required except for direct orders), the temperature shown on the probe
@@ -204,3 +204,6 @@ Before production use, review the temperature acceptance criteria against the ki
   Seals already created keep their own records. An **Undo** banner appears on Home.
 - **Temperature:** the note shows the FSSAI guideline of 65°C or above for hot food (5°C or below for
   cold). A lower reading shows a warning but never blocks the order.
+- **Seal label** now reads "We care your Hygiene; scan the barcode for the proof." above the QR code.
+- **Pack an order** warns when any Kitchen Hygiene proof section is not entered, with **Go back**
+  (scrolls to the Kitchen Hygiene proof list) or **Ignore** (continues to Pack an order).

@@ -24,6 +24,9 @@ object QrLabel {
     /** Random, unguessable 8-character order code (~850 billion combinations). */
     fun newCode(): String = buildString { repeat(8) { append(ALPHABET[random.nextInt(ALPHABET.length)]) } }
 
+    /** Printed above the QR code on every seal sent to the customer. */
+    val LABEL_MESSAGE = listOf("We care your Hygiene;", "scan the barcode for the proof.")
+
     fun qrBitmap(content: String, size: Int): Bitmap {
         val hints = mapOf(
             // M survives small smudges; long demo-mode links use L to keep the code printable
@@ -56,8 +59,11 @@ object QrLabel {
             color = Color.BLACK; textSize = 34f; typeface = Typeface.MONOSPACE; textAlign = Paint.Align.CENTER
             isFakeBoldText = true
         }
-        c.drawText("SCAN: see how your", width / 2f, 36f, title)
-        c.drawText("food was packed", width / 2f, 66f, title)
+        // Customer message above the QR code (shrunk to fit the 58 mm label if needed)
+        title.textSize = 26f
+        while (LABEL_MESSAGE.any { title.measureText(it) > width - 16 } && title.textSize > 14f) title.textSize -= 1f
+        c.drawText(LABEL_MESSAGE[0], width / 2f, 34f, title)
+        c.drawText(LABEL_MESSAGE[1], width / 2f, 66f, title)
         c.drawBitmap(qrBitmap(url, 352), 16f, 80f, null)
         c.drawText(code.chunked(4).joinToString(" "), width / 2f, 470f, big)
         c.drawText(kitchenName.take(28), width / 2f, 506f, small)

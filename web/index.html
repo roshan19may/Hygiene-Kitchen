@@ -272,7 +272,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     snap[invKey("Meat & Fish")] = e("Meat & Fish received", 5.5, "photo", { category: "Meat & Fish", billDate: "today", supplierType: "Wholesaler" });
     snap[invKey("Spices")] = e("Spices received", 24 * 9, "photo", { category: "Spices", supplierType: "Wholesaler" });
     snap.UTENSILS = e("Utensils cleaned", 2.1, "video", { cleaningMedium: "Detergent, Hot water, Food-grade sanitiser", shift: "Afternoon" });
-    snap.STAFF = e("Staff hygiene check", 2.6, "video", { checklist: "Hand-wash with soap, Cap / hairnet, Gloves, Clean apron", missing: "Mask, Nails trimmed", shift: "Afternoon" });
+    snap.STAFF = e("Staff hygiene check", 2.6, "video", { checklist: "Hand-wash with soap, Cap / hairnet, Gloves, Clean apron", missing: "Mask", shift: "Afternoon" });
     snap.PEST = e("Pest control service", 24 * 14, "photo", { vendor: "SafeHome Pest Services", nextDueDate: "in 16 days" });
     return {
       demo: true, kitchenName: "Biryani Box", kitchenLocality: "HSR Layout", kitchenCity: "Bengaluru",
@@ -412,7 +412,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
       '</section>' +
       '<section class="card"><div class="sectionhead"><div><h2>Packing evidence</h2><p>Recorded video of the packing process, where available.</p></div><span class="pill">No audio</span></div>' +
         '<figure class="clip video" style="margin:0">' + clip +
-          '<figcaption><span><strong>Packing clip</strong><br><span class="muted">Video is recorded without sound</span></span><span class="muted small">' + esc(o.platform || "Order") + ' · ' + esc(displayOrder) + '</span></figcaption></figure>' +
+          '<figcaption><span><strong>Hygiene Food Packing clip</strong><br><span class="muted">Video is recorded without sound</span></span><span class="muted small">' + esc(o.platform || "Order") + ' · ' + esc(displayOrder) + '</span></figcaption></figure>' +
       '</section>' +
       '<section class="stats">' +
         '<div class="stat"><div class="stathead"><span class="eyebrow">Temperature at packing</span><span class="pill ' + tempTone + '">' + esc(tempStatus) + '</span></div>' +

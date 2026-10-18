@@ -57,6 +57,7 @@ import com.kitchenlens.app.AppViewModel
 import com.kitchenlens.app.data.INVENTORY_CATEGORIES
 import com.kitchenlens.app.data.InventoryBill
 import com.kitchenlens.app.data.InventoryPhoto
+import com.kitchenlens.app.data.Section
 import com.kitchenlens.app.util.BillReader
 import com.kitchenlens.app.util.Dates
 import com.kitchenlens.app.util.Gstin
@@ -82,7 +83,7 @@ private data class BillDraft(
 )
 
 /**
- * Food inventory arrival: several categories at once, several photos per
+ * Food inventory details: several categories at once, several photos per
  * category, and any number of optional supplier bills. One bill can cover
  * one category, a few, or all of them.
  */
@@ -209,7 +210,7 @@ fun InventoryScreen(vm: AppViewModel, onDone: () -> Unit, onBack: () -> Unit) {
     }
 
     Scaffold(
-        topBar = { BackBar("Food inventory arrival", onReset = { resetScreen() }, onBack = onBack) },
+        topBar = { BackBar(Section.INVENTORY.title, onReset = { resetScreen() }, onBack = onBack) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { pad ->
         Column(

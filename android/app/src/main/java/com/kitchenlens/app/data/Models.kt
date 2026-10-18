@@ -2,11 +2,11 @@ package com.kitchenlens.app.data
 
 /** The five hygiene sections a kitchen records. */
 enum class Section(val title: String, val subtitle: String, val media: MediaType, val freshForHours: Int) {
-    INVENTORY("Food inventory arrival", "Photo of produce + supplier bill", MediaType.PHOTO, 48),
-    UTENSILS("Utensil cleaning", "Short clip of the wash + cleaning medium", MediaType.VIDEO, 12),
-    STAFF("Staff cooking hygiene", "Hand-wash, cap, gloves, apron check", MediaType.VIDEO, 12),
-    PEST("Pest control", "Service report photo + next due date", MediaType.PHOTO, 24 * 30),
-    PACKING("Packing + temperature", "Per-order packing clip and QR seal", MediaType.VIDEO, 0);
+    INVENTORY("Food inventory details", "Photo of produce + supplier bill", MediaType.PHOTO, 48),
+    UTENSILS("Cooking Utensils cleaning details", "Short clip of the wash + cleaning medium", MediaType.VIDEO, 12),
+    STAFF("Chef, Support staff cooking hygiene", "Hand-wash, cap, gloves, apron check", MediaType.VIDEO, 12),
+    PEST("Pest control details", "Service report photo + next due date", MediaType.PHOTO, 24 * 30),
+    PACKING("Packing + temperature", "Per-order Hygiene Food Packing clip and Order QR seal", MediaType.VIDEO, 0);
 }
 
 enum class MediaType(val value: String) { PHOTO("photo"), VIDEO("video") }
@@ -16,7 +16,7 @@ val INVENTORY_CATEGORIES = listOf("Vegetables", "Meat & Fish", "Dairy", "Spices"
 val PERISHABLE_CATEGORIES = setOf("Vegetables", "Meat & Fish", "Dairy")
 
 val CLEANING_MEDIA = listOf("Detergent", "Hot water", "Food-grade sanitiser", "Scrub pad", "Dishwasher machine", "Air-dried on rack")
-val STAFF_CHECKLIST = listOf("Hand-wash with soap", "Cap / hairnet", "Gloves", "Clean apron", "Mask", "Nails trimmed")
+val STAFF_CHECKLIST = listOf("Hand-wash with soap", "Cap / hairnet", "Gloves", "Clean apron", "Mask")
 val SHIFTS = listOf("Morning", "Afternoon", "Night")
 val PLATFORMS = listOf("Swiggy", "Zomato", "Ownly", "Toing", "Direct / Other")
 val CITIES = listOf("Bengaluru", "Mumbai", "Delhi NCR", "Hyderabad", "Chennai", "Pune", "Kolkata", "Ahmedabad")

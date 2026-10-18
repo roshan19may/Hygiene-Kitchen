@@ -40,6 +40,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -52,6 +59,14 @@ import com.kitchenlens.app.data.Kitchen
 import com.kitchenlens.app.data.Section
 import com.kitchenlens.app.data.latestKey
 import com.kitchenlens.app.util.HygieneScore
+
+/** Kitchen Hygiene proof sections with nothing recorded yet (inventory counts if any category is recorded). */
+private fun missingSections(k: Kitchen): List<Section> = listOfNotNull(
+    Section.INVENTORY.takeIf { k.latest.keys.none { it.startsWith("INV_") } },
+    Section.UTENSILS.takeIf { k.latest[Section.UTENSILS.name] == null },
+    Section.STAFF.takeIf { k.latest[Section.STAFF.name] == null },
+    Section.PEST.takeIf { k.latest[Section.PEST.name] == null },
+)
 
 private data class Status(val color: Color, val text: String)
 
@@ -98,6 +113,42 @@ fun HomeScreen(
     val kitchen by vm.kitchen.collectAsStateWithLifecycle()
     val draft by vm.draft.collectAsStateWithLifecycle()
     val lastReset by vm.lastReset.collectAsStateWithLifecycle()
+    val scroll = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    var proofSectionY by remember { mutableIntStateOf(0) }
+    var missingWarning by remember { mutableStateOf<List<Section>?>(null) }
+
+    /** Pack an order: warns first when Kitchen Hygiene proof sections are not entered. */
+    fun packWithCheck() {
+        val k = kitchen ?: return
+        val missing = missingSections(k)
+        if (missing.isEmpty()) onPack() else missingWarning = missing
+    }
+
+    missingWarning?.let { missing ->
+        AlertDialog(
+            onDismissRequest = { missingWarning = null },
+            icon = { Icon(Icons.Filled.Warning, contentDescription = null, tint = Chilli) },
+            title = { Text("Kitchen Hygiene proof not entered") },
+            text = {
+                Text(
+                    "These details are not entered yet:\n" +
+                        missing.joinToString("\n") { "• " + it.title } +
+                        "\n\nPacking without them may affect future regular orders, because customers " +
+                        "will not see this proof when they scan the seal."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    missingWarning = null
+                    scope.launch { scroll.animateScrollTo(proofSectionY) }
+                }) { Text("Go back") }
+            },
+            dismissButton = {
+                TextButton(onClick = { missingWarning = null; onPack() }) { Text("Ignore") }
+            },
+        )
+    }
     val message by vm.message.collectAsStateWithLifecycle()
     val k = kitchen
     Scaffold(
@@ -123,7 +174,7 @@ fun HomeScreen(
         val now = System.currentTimeMillis()
         val readiness = HygieneScore.compute(k.latest, tempOk = true, now = now)
         Column(
-            Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp).verticalScroll(rememberScrollState()),
+            Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp).verticalScroll(scroll),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (vm.repo.isDemo) DemoBanner()
@@ -176,7 +227,7 @@ fun HomeScreen(
                         )
                     }
                     Button(
-                        onClick = onPack,
+                        onClick = { packWithCheck() },
                         modifier = Modifier.fillMaxWidth(),
                         colors = androidx.compose.material3.ButtonDefaults.buttonColors(
                             containerColor = Turmeric, contentColor = Color(0xFF3A2A00),
@@ -198,7 +249,12 @@ fun HomeScreen(
                 }
             }
 
-            Text("Daily hygiene proof", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "Kitchen Hygiene proof",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.onGloballyPositioned { proofSectionY = it.positionInParent().y.toInt() },
+            )
             listOf(Section.INVENTORY, Section.UTENSILS, Section.STAFF, Section.PEST).forEach { s ->
                 val st = statusFor(k, s, now)
                 Card(

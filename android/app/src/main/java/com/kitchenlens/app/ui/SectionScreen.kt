@@ -104,7 +104,7 @@ private fun StaffChecklist(selected: Set<String>, onChange: (Set<String>) -> Uni
     }
 }
 
-/** Records one of the four daily hygiene sections (inventory, utensils, staff, pest control). */
+/** Records one of the four Kitchen Hygiene proof sections (inventory, utensils, staff, pest control). */
 @Composable
 fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current

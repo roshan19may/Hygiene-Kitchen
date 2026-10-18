@@ -229,7 +229,7 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
 
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Packing clip (5–20 s, no sound)", fontWeight = FontWeight.SemiBold)
+                    Text("Hygiene Food Packing clip (5–20 s, no sound)", fontWeight = FontWeight.SemiBold)
                     if (clip != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.CheckCircle, null, tint = Ok)
@@ -239,7 +239,7 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
                     }
                     OutlinedButton(onClick = { recording = true }, enabled = !working, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Filled.Videocam, null); Spacer(Modifier.size(8.dp))
-                        Text(if (clip == null) "Record packing clip" else "Re-record")
+                        Text(if (clip == null) "Record Hygiene Food Packing clip" else "Re-record")
                     }
                 }
             }
@@ -276,7 +276,7 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
                         packer.isBlank() -> "Enter the packer's name"
                         temp == null -> "Enter the temperature reading"
                         temp < -30 || temp > 120 -> "That temperature looks wrong. Check the probe."
-                        c == null || !c.exists() -> "Record the packing clip"
+                        c == null || !c.exists() -> "Record the Hygiene Food Packing clip"
                         else -> null
                     }
                     if (error == null && c != null && temp != null) {
@@ -304,7 +304,7 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
                         }
                     }
                 },
-            ) { Text(if (working) "Uploading clip…" else "Create QR seal", fontWeight = FontWeight.Bold) }
+            ) { Text(if (working) "Uploading clip…" else "Create Order QR seal", fontWeight = FontWeight.Bold) }
             Spacer(Modifier.size(24.dp))
         }
     }
