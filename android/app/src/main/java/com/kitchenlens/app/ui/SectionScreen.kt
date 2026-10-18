@@ -47,13 +47,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.kitchenlens.app.AppViewModel
 import com.kitchenlens.app.data.CLEANING_MEDIA
-import com.kitchenlens.app.data.INVENTORY_CATEGORIES
 import com.kitchenlens.app.data.MediaType
 import com.kitchenlens.app.data.SHIFTS
 import com.kitchenlens.app.data.STAFF_CHECKLIST
 import com.kitchenlens.app.data.Section
-import com.kitchenlens.app.data.latestKey
-import com.kitchenlens.app.util.BillReader
 import com.kitchenlens.app.util.ImageTools
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -61,7 +58,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 private val SECTION_HINTS = mapOf(
-    Section.INVENTORY to "Photograph the produce as it arrives. Keep spice labels and recipe cards out of the frame.",
     Section.UTENSILS to "Record the wash: scrubbing, rinsing in hot water or sanitiser, and the drying rack.",
     Section.STAFF to "Record each staff member washing hands with soap, then show cap, gloves and apron.",
     Section.PEST to "Photograph the pest-control service report showing the vendor and date.",
@@ -75,9 +71,6 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
     val kitchen by vm.kitchen.collectAsStateWithLifecycle()
 
     var staffName by remember { mutableStateOf(vm.lastPackerName) }
-    var category by remember { mutableStateOf(setOf<String>()) }
-    var supplier by remember { mutableStateOf(setOf<String>()) }
-    var billDate by remember { mutableStateOf("") }
     var media by remember { mutableStateOf(setOf<String>()) }
     var checklist by remember { mutableStateOf(setOf<String>()) }
     var shift by remember { mutableStateOf(setOf<String>()) }
@@ -89,27 +82,24 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
     var mainFile by remember { mutableStateOf<File?>(null) }
     var mainSeconds by remember { mutableIntStateOf(0) }
     var photoHash by remember { mutableStateOf<String?>(null) }
-    var billFile by remember { mutableStateOf<File?>(null) }
 
-    var capturing by remember { mutableStateOf<String?>(null) } // "main" | "bill" | null
+    var capturing by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
     var error by remember { mutableStateOf<String?>(null) }
-    var note by remember { mutableStateOf<String?>(null) }
 
     val k = kitchen
     if (k == null) { CenteredLoading(); return }
 
     // ---- full-screen camera when capturing ----
-    if (capturing != null) {
-        val forBill = capturing == "bill"
-        val photoMode = forBill || section.media == MediaType.PHOTO
+    if (capturing) {
+        val photoMode = section.media == MediaType.PHOTO
         CameraCapture(
             mode = if (photoMode) CaptureMode.PHOTO else CaptureMode.VIDEO,
-            hint = if (forBill) "Photograph the supplier bill so the date is readable." else SECTION_HINTS[section] ?: "",
-            onCancel = { capturing = null },
+            hint = SECTION_HINTS[section] ?: "",
+            onCancel = { capturing = false },
             onCaptured = { file, secs ->
-                capturing = null
+                capturing = false
                 if (!photoMode) {
                     mainFile = file; mainSeconds = secs
                 } else {
@@ -117,13 +107,7 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
                     scope.launch {
                         try {
                             val (small, hash) = withContext(Dispatchers.Default) { ImageTools.compress(file, context.cacheDir) }
-                            if (forBill) {
-                                billFile = small
-                                note = "Reading the bill date…"
-                                val found = runCatching { BillReader.readDate(context, small) }.getOrNull()
-                                if (found != null) { billDate = found; note = "Bill date read automatically: $found (check it)" }
-                                else note = "Could not read a date. Please type it."
-                            } else if (ImageTools.isDuplicate(hash, k.recentHashes)) {
+                            if (ImageTools.isDuplicate(hash, k.recentHashes)) {
                                 error = "This photo looks the same as an earlier upload. Please take a fresh photo."
                             } else {
                                 mainFile = small; photoHash = hash; error = null
@@ -142,11 +126,7 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
         error = null
         val f = mainFile
         val sectionError = when (section) {
-            Section.INVENTORY -> when {
-                category.isEmpty() -> "Choose the food category"
-                billDate.isNotBlank() && parseDate(billDate) == null -> "Bill date must be dd-mm-yyyy"
-                else -> null
-            }
+            Section.INVENTORY -> null // handled by InventoryScreen
             Section.UTENSILS -> if (media.isEmpty()) "Choose the cleaning medium used" else if (shift.isEmpty()) "Choose the shift" else null
             Section.STAFF -> when {
                 "Hand-wash with soap" !in checklist -> "Hand-wash with soap must be done and recorded"
@@ -168,17 +148,10 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
         if (error != null || f == null) return
 
         val details = mutableMapOf<String, String>()
-        var key = section.name
+        val key = section.name
         val label: String
         when (section) {
-            Section.INVENTORY -> {
-                val cat = category.first()
-                key = latestKey(section, cat)
-                label = "$cat received"
-                details["category"] = cat
-                if (billDate.isNotBlank()) details["billDate"] = billDate
-                if (supplier.isNotEmpty()) details["supplierType"] = supplier.first()
-            }
+            Section.INVENTORY -> label = "Inventory" // handled by InventoryScreen
             Section.UTENSILS -> {
                 label = "Utensils cleaned"
                 details["cleaningMedium"] = media.joinToString(", ")
@@ -211,7 +184,7 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
             try {
                 vm.repo.saveLog(
                     kitchen = k, section = section, key = key, staffName = staffName,
-                    media = f, mediaType = section.media, billPhoto = billFile,
+                    media = f, mediaType = section.media,
                     details = details, label = label, photoHash = photoHash,
                     onProgress = { progress = it },
                 )
@@ -233,10 +206,7 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
             Text(section.subtitle, style = MaterialTheme.typography.bodyMedium)
 
             when (section) {
-                Section.INVENTORY -> {
-                    ChipPicker("Food category (customers see the category only)", INVENTORY_CATEGORIES, category, multi = false) { category = it }
-                    ChipPicker("Bought from (optional)", listOf("Local market", "Wholesaler", "Online supplier", "Farm"), supplier, multi = false) { supplier = it }
-                }
+                Section.INVENTORY -> Unit // handled by InventoryScreen
                 Section.UTENSILS -> {
                     ChipPicker("Cleaning medium used", CLEANING_MEDIA, media, multi = true) { media = it }
                     ChipPicker("Shift", SHIFTS, shift, multi = false) { shift = it }
@@ -279,30 +249,10 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
                             }
                         }
                     }
-                    OutlinedButton(onClick = { capturing = "main" }, enabled = !working, modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(onClick = { capturing = true }, enabled = !working, modifier = Modifier.fillMaxWidth()) {
                         Icon(if (isPhoto) Icons.Filled.CameraAlt else Icons.Filled.Videocam, null)
                         Spacer(Modifier.size(8.dp))
                         Text(if (f == null) (if (isPhoto) "Take photo" else "Record clip") else "Retake")
-                    }
-                }
-            }
-
-            if (section == Section.INVENTORY) {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Supplier bill (kept private; only the date is shown)", fontWeight = FontWeight.SemiBold)
-                        if (billFile != null) {
-                            AsyncImage(
-                                model = billFile, contentDescription = "Bill", contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxWidth().height(140.dp).clip(RoundedCornerShape(10.dp)),
-                            )
-                        }
-                        OutlinedButton(onClick = { capturing = "bill" }, enabled = !working, modifier = Modifier.fillMaxWidth()) {
-                            Icon(Icons.Filled.CameraAlt, null); Spacer(Modifier.size(8.dp))
-                            Text(if (billFile == null) "Photograph bill (reads date automatically)" else "Retake bill")
-                        }
-                        if (note != null) Text(note!!, style = MaterialTheme.typography.bodySmall)
-                        OutlinedTextField(billDate, { billDate = it }, label = { Text("Bill date (dd-mm-yyyy)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     }
                 }
             }

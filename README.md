@@ -35,6 +35,10 @@ to see the customer page inside the app.
 
 ### Make the QR codes scannable (optional, 2 minutes)
 
+On a free GitHub plan, Pages only works for **public** repositories: either make the
+repository public (Settings > General > Danger Zone > Change visibility) or upgrade to
+GitHub Pro. Otherwise scanning a seal shows GitHub's 404 page.
+
 1. **Settings > Pages > Build and deployment > Source: GitHub Actions.**
 2. Run **Actions > Publish customer scan page > Run workflow**.
 3. Re-run the Android build so the QR codes point to
@@ -85,11 +89,14 @@ Install the new APK. It now uses real logins and real cloud storage, and QR code
 
 ## 3. How the app works
 
+**Kitchen details** (shop icon on the Home screen): name, locality, FSSAI number and
+GST number (GSTIN, optional, format-checked). Customers see FSSAI and GSTIN on every seal.
+
 **Daily hygiene proof (Home screen)**
 
 | Section | Captured | Customer sees |
 |---|---|---|
-| Food inventory arrival | Live photo of produce per category, supplier bill photo | Category and how long before packing it arrived; bill date only (the bill photo stays private) |
+| Food inventory arrival | Several categories at once, up to 6 live photos per category; optional supplier bills (one bill can cover some or all categories), with date and supplier GSTIN read automatically | All photos per category, how long before packing it arrived, latest bill date, "GST-registered supplier" (bill photos and supplier GSTINs stay private) |
 | Utensil cleaning | 5–20 s clip, cleaning medium, shift | Clip and cleaning medium |
 | Staff cooking hygiene | 5–20 s clip, checklist (hand-wash, cap, gloves…), shift | Clip, checks done, checks **not** done |
 | Pest control | Photo of service report, vendor, service date, next due | Vendor and next due date |

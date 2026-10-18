@@ -44,13 +44,11 @@ class LocalRepository(context: Context) : KitchenRepository {
     override suspend fun loadKitchenId(): String? =
         state.optJSONObject("kitchen")?.optString("id")?.ifBlank { null }
 
-    override suspend fun createKitchen(name: String, locality: String, city: String, fssai: String, tier: String): String {
+    override suspend fun createKitchen(name: String, locality: String, city: String, fssai: String, gstin: String, tier: String): String {
         val id = "demo-" + UUID.randomUUID().toString().take(8)
         state.put("kitchen", toJson(mapOf(
-            "id" to id, "name" to name.trim(), "locality" to locality.trim(), "city" to city,
-            "fssai" to fssai.trim(), "tier" to tier, "latest" to emptyMap<String, Any>(),
-            "recentHashes" to emptyList<String>(),
-        )))
+            "id" to id, "latest" to emptyMap<String, Any>(), "recentHashes" to emptyList<String>(),
+        ) + profileMap(name, locality, city, fssai, gstin, tier)))
         save()
         return id
     }
@@ -58,6 +56,14 @@ class LocalRepository(context: Context) : KitchenRepository {
     @Suppress("UNCHECKED_CAST")
     private fun kitchenMap(): MutableMap<String, Any?> =
         (fromJson(state.getJSONObject("kitchen")) as Map<String, Any?>).toMutableMap()
+
+    override suspend fun updateKitchenProfile(kitchenId: String, profile: Map<String, String>) {
+        val k = kitchenMap()
+        k.putAll(profile)
+        state.put("kitchen", toJson(k))
+        save()
+        kitchenFlow.value = kitchenFromMap(kitchenId, k)
+    }
 
     override fun observeKitchen(kitchenId: String): Flow<Kitchen?> {
         kitchenFlow.value = kitchenFromMap(kitchenId, kitchenMap())
@@ -73,30 +79,58 @@ class LocalRepository(context: Context) : KitchenRepository {
     }
 
     @Suppress("UNCHECKED_CAST")
+    private fun commit(kitchen: Kitchen, summaries: Map<String, Any>, newHashes: List<String>, logEntries: List<Map<String, Any?>>) {
+        val k = kitchenMap()
+        val latest = ((k["latest"] as? Map<String, Any?>) ?: emptyMap()).toMutableMap()
+        latest.putAll(summaries)
+        k["latest"] = latest
+        if (newHashes.isNotEmpty()) k["recentHashes"] = (newHashes + kitchen.recentHashes).take(60)
+        state.put("kitchen", toJson(k))
+        val logs = state.optJSONArray("logs") ?: JSONArray()
+        logEntries.forEach { logs.put(toJson(it)) }
+        state.put("logs", logs)
+        save()
+        kitchenFlow.value = kitchenFromMap(kitchen.id, k)
+    }
+
     override suspend fun saveLog(
         kitchen: Kitchen, section: Section, key: String, staffName: String, media: File,
-        mediaType: MediaType, billPhoto: File?, details: Map<String, String>, label: String,
+        mediaType: MediaType, details: Map<String, String>, label: String,
         photoHash: String?, onProgress: (Float) -> Unit,
     ) = withContext(Dispatchers.IO) {
         val mediaUrl = copyIn(media, if (mediaType == MediaType.VIDEO) "mp4" else "jpg")
         onProgress(1f)
-        val billUrl = billPhoto?.let { copyIn(it, "jpg") }
-        val allDetails = if (billUrl != null) details + ("billUrl" to billUrl) else details
         val now = System.currentTimeMillis()
+        commit(
+            kitchen,
+            mapOf(key to publicSummary(now, mediaUrl, mediaType, label, details)),
+            listOfNotNull(photoHash),
+            listOf(mapOf("section" to section.name, "key" to key, "staffName" to staffName,
+                "mediaUrl" to mediaUrl, "details" to details, "label" to label, "capturedAtMillis" to now)),
+        )
+    }
 
-        val k = kitchenMap()
-        val latest = ((k["latest"] as? Map<String, Any?>) ?: emptyMap()).toMutableMap()
-        latest[key] = publicSummary(now, mediaUrl, mediaType, label, allDetails)
-        k["latest"] = latest
-        if (photoHash != null) k["recentHashes"] = (listOf(photoHash) + kitchen.recentHashes).take(60)
-        state.put("kitchen", toJson(k))
-
-        val logs = state.optJSONArray("logs") ?: JSONArray()
-        logs.put(toJson(mapOf("section" to section.name, "key" to key, "staffName" to staffName,
-            "mediaUrl" to mediaUrl, "details" to allDetails, "label" to label, "capturedAtMillis" to now)))
-        state.put("logs", logs)
-        save()
-        kitchenFlow.value = kitchenFromMap(kitchen.id, k)
+    override suspend fun saveInventory(
+        kitchen: Kitchen, staffName: String, supplierType: String?,
+        photos: Map<String, List<InventoryPhoto>>, bills: List<InventoryBill>,
+        onProgress: (Float) -> Unit,
+    ) = withContext(Dispatchers.IO) {
+        val photoUrls = photos.mapValues { (_, list) -> list.map { copyIn(it.file, "jpg") } }
+        val billUrls = bills.map { copyIn(it.file, "jpg") }
+        onProgress(1f)
+        val now = System.currentTimeMillis()
+        val records = buildInventoryRecords(photoUrls, bills, billUrls, supplierType)
+        commit(
+            kitchen,
+            records.associate { r ->
+                r.key to publicSummary(now, r.mediaUrls.first(), MediaType.PHOTO, r.label, r.details, r.mediaUrls)
+            },
+            photos.values.flatten().map { it.hash },
+            records.map { r ->
+                mapOf("section" to Section.INVENTORY.name, "key" to r.key, "staffName" to staffName,
+                    "mediaUrls" to r.mediaUrls, "details" to r.details, "label" to r.label, "capturedAtMillis" to now)
+            },
+        )
     }
 
     override suspend fun createOrder(

@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ListAlt
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -87,6 +88,7 @@ fun HomeScreen(
     onSection: (Section) -> Unit,
     onPack: () -> Unit,
     onOrders: () -> Unit,
+    onEditKitchen: () -> Unit,
 ) {
     val kitchen by vm.kitchen.collectAsStateWithLifecycle()
     val k = kitchen
@@ -100,6 +102,7 @@ fun HomeScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onEditKitchen) { Icon(Icons.Filled.Storefront, "Kitchen details") }
                     IconButton(onClick = onOrders) { Icon(Icons.AutoMirrored.Filled.ListAlt, "Recent orders") }
                     IconButton(onClick = { vm.signOut() }) { Icon(Icons.AutoMirrored.Filled.Logout, "Sign out") }
                 },
@@ -116,6 +119,13 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (vm.repo.isDemo) DemoBanner()
+            if (k.gstin.isBlank()) {
+                Text(
+                    "Tip: add your GST number in Kitchen details (shop icon above) so customers see it on every seal.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.clickable { onEditKitchen() },
+                )
+            }
 
             Card(colors = CardDefaults.cardColors(containerColor = Leaf)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

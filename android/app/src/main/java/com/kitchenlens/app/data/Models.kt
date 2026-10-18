@@ -33,10 +33,25 @@ data class Kitchen(
     val locality: String = "",
     val city: String = "",
     val fssai: String = "",
+    val gstin: String = "",
     val tier: String = "",
     /** latestKey -> summary map (at, mediaUrl, mediaType, label, details) */
     val latest: Map<String, Map<String, Any?>> = emptyMap(),
     val recentHashes: List<String> = emptyList(),
+)
+
+/** One produce photo taken on the inventory screen. */
+data class InventoryPhoto(val file: java.io.File, val hash: String)
+
+/**
+ * One supplier bill photo. A bill can cover several categories (or all of them).
+ * The bill photo and supplier GSTIN stay private; customers only see the date.
+ */
+data class InventoryBill(
+    val file: java.io.File,
+    val categories: Set<String>,
+    val billDate: String,
+    val supplierGstin: String,
 )
 
 data class OrderSummary(

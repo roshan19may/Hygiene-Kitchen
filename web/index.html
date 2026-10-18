@@ -106,6 +106,7 @@ a { color: var(--leaf); font-weight: 700; }
 .entry .det { font-size: .875rem; color: var(--muted); }
 .media { margin-top: 8px; }
 .media img, .media video { width: 100%; max-width: 100%; border-radius: 10px; display: block; }
+.gallery { display: flex; flex-direction: column; gap: 8px; }
 .media .placeholder {
   border-radius: 10px; aspect-ratio: 4 / 3; max-width: 100%; display: grid; place-items: center;
   background: var(--leaf-soft); color: var(--leaf); font-weight: 700; text-align: center; padding: 12px;
@@ -184,7 +185,7 @@ a { color: var(--leaf); font-weight: 700; }
       return { at: p - hoursBefore * HOUR, label: label, mediaType: type, mediaUrl: "", details: details };
     }
     var snap = {};
-    snap[invKey("Vegetables")] = e("Vegetables received", 7.2, "photo", { category: "Vegetables", billDate: "today", supplierType: "Local market" });
+    snap[invKey("Vegetables")] = e("Vegetables received", 7.2, "photo", { category: "Vegetables", photoCount: "3", billDate: "today", billCount: "2", supplierGst: "registered", supplierType: "Local market" });
     snap[invKey("Meat & Fish")] = e("Meat & Fish received", 5.5, "photo", { category: "Meat & Fish", billDate: "today", supplierType: "Wholesaler" });
     snap[invKey("Spices")] = e("Spices received", 24 * 9, "photo", { category: "Spices", supplierType: "Wholesaler" });
     snap.UTENSILS = e("Utensils cleaned", 2.1, "video", { cleaningMedium: "Detergent, Hot water, Food-grade sanitiser", shift: "Afternoon" });
@@ -192,7 +193,7 @@ a { color: var(--leaf); font-weight: 700; }
     snap.PEST = e("Pest control service", 24 * 14, "photo", { vendor: "SafeHome Pest Services", nextDueDate: "in 16 days" });
     return {
       demo: true, kitchenName: "Biryani Box", kitchenLocality: "HSR Layout", kitchenCity: "Bengaluru",
-      fssai: "11223344556677", platform: "Swiggy", orderRefLast4: "4471", packerName: "Asha",
+      fssai: "11223344556677", gstin: "29ABCDE1234F1ZW", platform: "Swiggy", orderRefLast4: "4471", packerName: "Asha",
       foodType: "Hot", tempC: 71, tempOk: true, score: 90, packedAtMillis: p, clipUrl: "", snapshot: snap
     };
   }
@@ -209,8 +210,10 @@ a { color: var(--leaf); font-weight: 700; }
   }
   function detailLine(d) {
     d = d || {};
+    var pc = Number(d.photoCount || 0), bc = Number(d.billCount || 0);
     return [
-      d.billDate && ("bill dated " + d.billDate), d.supplierType, d.cleaningMedium, d.checklist,
+      pc > 1 && (pc + " photos"), d.billDate && ("bill dated " + d.billDate), bc > 1 && (bc + " bills"),
+      d.supplierGst && "GST-registered supplier", d.supplierType, d.cleaningMedium, d.checklist,
       d.missing && ("not shown: " + d.missing), d.vendor && ("by " + d.vendor), d.nextDueDate && ("next due " + d.nextDueDate)
     ].filter(Boolean).join(" · ");
   }
@@ -218,6 +221,12 @@ a { color: var(--leaf); font-weight: 700; }
 
   function mediaHtml(entry, demo) {
     var url = safeUrl(entry.mediaUrl);
+    var many = (entry.mediaUrls || []).map(safeUrl).filter(Boolean);
+    if (entry.mediaType !== "video" && many.length > 1) {
+      return '<div class="gallery">' + many.map(function (u, i) {
+        return '<img src="' + esc(u) + '" alt="' + esc(entry.label) + " photo " + (i + 1) + '" loading="lazy">';
+      }).join("") + "</div>";
+    }
     if (!url) return '<div class="placeholder">' + (demo ? "Sample: the kitchen's " + (entry.mediaType === "video" ? "clip" : "photo") + " appears here" : "Media unavailable") + "</div>";
     return entry.mediaType === "video"
       ? '<video src="' + esc(url) + '" controls muted playsinline preload="metadata"></video>'
@@ -259,7 +268,8 @@ a { color: var(--leaf); font-weight: 700; }
         '<div class="stamp" aria-hidden="true"><div><b>SEALED</b><span>' + esc(code.slice(0, 4)) + "<br>" + esc(code.slice(4)) + "</span></div></div>" +
         '<div class="kitchen"><span class="eyebrow">How your food was packed</span>' +
         "<h1>" + esc(o.kitchenName) + "</h1>" +
-        '<span class="muted small">' + esc(o.kitchenLocality) + ", " + esc(o.kitchenCity) + ' · FSSAI <span class="mono">' + esc(o.fssai) + "</span></span></div>" +
+        '<span class="muted small">' + esc(o.kitchenLocality) + ", " + esc(o.kitchenCity) + ' · FSSAI <span class="mono">' + esc(o.fssai) + "</span>" +
+        (o.gstin ? ' · GSTIN <span class="mono">' + esc(o.gstin) + "</span>" : "") + "</span></div>" +
       "</section>" +
       '<figure class="clip" style="margin:0">' + clip +
         '<figcaption><span><b>Packing clip</b> · no sound</span><span class="muted small">' +

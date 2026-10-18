@@ -79,7 +79,8 @@ private fun CustomerView(o: Map<String, Any?>, modifier: Modifier) {
     ) {
         Text(o["kitchenName"] as? String ?: "", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(
-            "${o["kitchenLocality"] ?: ""}, ${o["kitchenCity"] ?: ""} · FSSAI ${o["fssai"] ?: ""}",
+            "${o["kitchenLocality"] ?: ""}, ${o["kitchenCity"] ?: ""} · FSSAI ${o["fssai"] ?: ""}" +
+                ((o["gstin"] as? String)?.takeIf { it.isNotBlank() }?.let { " · GSTIN $it" } ?: ""),
             style = MaterialTheme.typography.bodySmall,
         )
         Text(
@@ -123,8 +124,13 @@ private fun Stat(modifier: Modifier, value: String, label: String, color: Color)
 
 private fun detailsLine(entry: Map<String, Any?>): String {
     val d = entry["details"] as? Map<*, *> ?: return ""
+    val photos = (d["photoCount"] as? String)?.toIntOrNull()
+    val billCount = (d["billCount"] as? String)?.toIntOrNull()
     return listOfNotNull(
+        photos?.takeIf { it > 1 }?.let { "$it photos" },
         d["billDate"]?.let { "bill dated $it" },
+        billCount?.takeIf { it > 1 }?.let { "$it bills" },
+        d["supplierGst"]?.let { "GST-registered supplier" },
         d["supplierType"]?.toString(),
         d["cleaningMedium"]?.toString(),
         d["checklist"]?.toString(),
@@ -154,11 +160,14 @@ private fun ProofRow(entry: Map<String, Any?>, packedAt: Long) {
             if (line.isNotBlank()) Text(line, style = MaterialTheme.typography.bodySmall)
             if (open) {
                 val url = entry["mediaUrl"] as? String
+                val urls = (entry["mediaUrls"] as? List<*>)?.filterIsInstance<String>().orEmpty().ifEmpty { listOfNotNull(url) }
                 if (isVideo) ClipPlayer(url)
-                else AsyncImage(
-                    model = url, contentDescription = null, contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(10.dp)),
-                )
+                else urls.forEach { u ->
+                    AsyncImage(
+                        model = u, contentDescription = null, contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(10.dp)),
+                    )
+                }
             }
         }
     }

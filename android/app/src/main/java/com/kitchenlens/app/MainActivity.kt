@@ -25,6 +25,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.kitchenlens.app.data.Section
 import com.kitchenlens.app.ui.CenteredLoading
+import com.kitchenlens.app.ui.EditKitchenScreen
+import com.kitchenlens.app.ui.InventoryScreen
 import com.kitchenlens.app.ui.HomeScreen
 import com.kitchenlens.app.ui.KitchenLensTheme
 import com.kitchenlens.app.ui.LoginScreen
@@ -76,10 +78,19 @@ private fun MainNav(vm: AppViewModel, kitchenId: String) {
         composable("home") {
             HomeScreen(
                 vm = vm,
-                onSection = { nav.navigate("section/${it.name}") },
+                onSection = {
+                    if (it == Section.INVENTORY) nav.navigate("inventory") else nav.navigate("section/${it.name}")
+                },
                 onPack = { nav.navigate("pack") },
                 onOrders = { nav.navigate("orders") },
+                onEditKitchen = { nav.navigate("kitchen") },
             )
+        }
+        composable("inventory") {
+            InventoryScreen(vm, onDone = { nav.popBackStack() }, onBack = { nav.popBackStack() })
+        }
+        composable("kitchen") {
+            EditKitchenScreen(vm, onDone = { nav.popBackStack() }, onBack = { nav.popBackStack() })
         }
         composable("section/{name}") { entry ->
             val section = Section.valueOf(entry.arguments?.getString("name") ?: Section.UTENSILS.name)

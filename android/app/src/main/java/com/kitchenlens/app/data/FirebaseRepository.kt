@@ -41,13 +41,12 @@ class FirebaseRepository : KitchenRepository {
         return db.collection("users").document(uid).get().await().getString("kitchenId")
     }
 
-    override suspend fun createKitchen(name: String, locality: String, city: String, fssai: String, tier: String): String {
+    override suspend fun createKitchen(name: String, locality: String, city: String, fssai: String, gstin: String, tier: String): String {
         val uid = auth.currentUser?.uid ?: error("Not signed in")
         val ref = db.collection("kitchens").document()
         db.batch()
-            .set(ref, mapOf(
-                "name" to name.trim(), "locality" to locality.trim(), "city" to city,
-                "fssai" to fssai.trim(), "tier" to tier, "ownerUid" to uid,
+            .set(ref, profileMap(name, locality, city, fssai, gstin, tier) + mapOf(
+                "ownerUid" to uid,
                 "latest" to emptyMap<String, Any>(), "recentHashes" to emptyList<String>(),
                 "createdAt" to FieldValue.serverTimestamp(),
             ))
@@ -56,6 +55,10 @@ class FirebaseRepository : KitchenRepository {
             ))
             .commit().await()
         return ref.id
+    }
+
+    override suspend fun updateKitchenProfile(kitchenId: String, profile: Map<String, String>) {
+        db.collection("kitchens").document(kitchenId).update(HashMap<String, Any>(profile)).await()
     }
 
     private fun parse(snap: DocumentSnapshot): Kitchen = kitchenFromMap(snap.id, snap.data ?: emptyMap())
@@ -83,7 +86,7 @@ class FirebaseRepository : KitchenRepository {
 
     override suspend fun saveLog(
         kitchen: Kitchen, section: Section, key: String, staffName: String, media: File,
-        mediaType: MediaType, billPhoto: File?, details: Map<String, String>, label: String,
+        mediaType: MediaType, details: Map<String, String>, label: String,
         photoHash: String?, onProgress: (Float) -> Unit,
     ) {
         val id = UUID.randomUUID().toString()
@@ -92,24 +95,63 @@ class FirebaseRepository : KitchenRepository {
             media, "kitchens/${kitchen.id}/logs/$id.${if (isVideo) "mp4" else "jpg"}",
             if (isVideo) "video/mp4" else "image/jpeg", onProgress,
         )
-        val billUrl = billPhoto?.let { upload(it, "kitchens/${kitchen.id}/logs/${id}_bill.jpg", "image/jpeg") {} }
-        val allDetails = if (billUrl != null) details + ("billUrl" to billUrl) else details
         val now = System.currentTimeMillis()
 
         val kitchenRef = db.collection("kitchens").document(kitchen.id)
         val updates = mutableMapOf<String, Any>(
-            "latest.$key" to publicSummary(now, mediaUrl, mediaType, label, allDetails),
+            "latest.$key" to publicSummary(now, mediaUrl, mediaType, label, details),
         )
         if (photoHash != null) updates["recentHashes"] = (listOf(photoHash) + kitchen.recentHashes).take(60)
 
         db.batch()
             .set(kitchenRef.collection("logs").document(id), mapOf(
                 "section" to section.name, "key" to key, "staffName" to staffName.trim(),
-                "mediaType" to mediaType.value, "mediaUrl" to mediaUrl, "details" to allDetails,
+                "mediaType" to mediaType.value, "mediaUrl" to mediaUrl, "details" to details,
                 "label" to label, "capturedAtMillis" to now, "createdAt" to FieldValue.serverTimestamp(),
             ))
             .update(kitchenRef, updates)
             .commit().await()
+    }
+
+    override suspend fun saveInventory(
+        kitchen: Kitchen, staffName: String, supplierType: String?,
+        photos: Map<String, List<InventoryPhoto>>, bills: List<InventoryBill>,
+        onProgress: (Float) -> Unit,
+    ) {
+        val batchId = UUID.randomUUID().toString().take(8)
+        val total = photos.values.sumOf { it.size } + bills.size
+        var done = 0
+        fun step() { done++; onProgress(done.toFloat() / total) }
+
+        val photoUrls = photos.mapValues { (cat, list) ->
+            list.mapIndexed { i, p ->
+                val safe = cat.replace(Regex("[^A-Za-z]"), "")
+                upload(p.file, "kitchens/${kitchen.id}/logs/${batchId}_${safe}_$i.jpg", "image/jpeg") {}
+                    .also { step() }
+            }
+        }
+        val billUrls = bills.mapIndexed { i, b ->
+            upload(b.file, "kitchens/${kitchen.id}/logs/${batchId}_bill_$i.jpg", "image/jpeg") {}.also { step() }
+        }
+
+        val records = buildInventoryRecords(photoUrls, bills, billUrls, supplierType)
+        val now = System.currentTimeMillis()
+        val kitchenRef = db.collection("kitchens").document(kitchen.id)
+        val updates = mutableMapOf<String, Any>()
+        val batch = db.batch()
+        records.forEach { r ->
+            updates["latest.${r.key}"] = publicSummary(now, r.mediaUrls.first(), MediaType.PHOTO, r.label, r.details, r.mediaUrls)
+            batch.set(kitchenRef.collection("logs").document(), mapOf(
+                "section" to Section.INVENTORY.name, "key" to r.key, "staffName" to staffName.trim(),
+                "mediaType" to MediaType.PHOTO.value, "mediaUrl" to r.mediaUrls.first(), "mediaUrls" to r.mediaUrls,
+                "details" to r.details, "label" to r.label, "capturedAtMillis" to now,
+                "createdAt" to FieldValue.serverTimestamp(),
+            ))
+        }
+        val newHashes = photos.values.flatten().map { it.hash }
+        updates["recentHashes"] = (newHashes + kitchen.recentHashes).take(60)
+        batch.update(kitchenRef, updates)
+        batch.commit().await()
     }
 
     override suspend fun createOrder(
