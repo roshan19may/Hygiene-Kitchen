@@ -1,5 +1,6 @@
 package com.kitchenlens.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,11 +15,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -26,10 +32,12 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -41,14 +49,22 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kitchenlens.app.AppViewModel
+import com.kitchenlens.app.data.DuplicateOrderException
+import com.kitchenlens.app.data.OrderDraft
 import com.kitchenlens.app.data.PLATFORMS
 import com.kitchenlens.app.util.HygieneScore
 import kotlinx.coroutines.launch
 import java.io.File
 
+/** Platform for orders taken directly (phone, walk-in); the only one where an order number is optional. */
+private val DIRECT = PLATFORMS.last()
+
 /**
- * Per-order flow (~30 seconds): platform + order no. → food temperature →
- * 5–20 s packing clip → QR seal.
+ * Per-order flow: platform + order number → food temperature → 5–20 s packing
+ * clip → QR seal. The seal is linked to the platform order number.
+ *
+ * Progress is kept as a draft on the phone: "Save draft" stores it, leaving the
+ * screen saves it automatically, and "New order" clears everything.
  *
  * Temperature is typed from the probe display for now. A Bluetooth probe can
  * later fill [tempText] automatically (see README, "Next steps").
@@ -57,18 +73,57 @@ import java.io.File
 fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val kitchen by vm.kitchen.collectAsStateWithLifecycle()
+    val initial = remember { vm.draft.value ?: OrderDraft(packer = vm.lastPackerName) }
 
-    var platform by remember { mutableStateOf(setOf<String>()) }
-    var orderRef by remember { mutableStateOf("") }
-    var packer by remember { mutableStateOf(vm.lastPackerName) }
-    var foodType by remember { mutableStateOf(setOf("Hot")) }
-    var tempText by remember { mutableStateOf("") }
-    var clip by remember { mutableStateOf<File?>(null) }
-    var clipSeconds by remember { mutableIntStateOf(0) }
+    var platform by remember { mutableStateOf(if (initial.platform.isBlank()) setOf() else setOf(initial.platform)) }
+    var orderRef by remember { mutableStateOf(initial.orderRef) }
+    var packer by remember { mutableStateOf(initial.packer.ifBlank { vm.lastPackerName }) }
+    var foodType by remember { mutableStateOf(setOf(initial.foodType.ifBlank { "Hot" })) }
+    var tempText by remember { mutableStateOf(initial.tempText) }
+    var clip by remember { mutableStateOf(initial.clipPath?.let { File(it) }?.takeIf { it.exists() }) }
+    var clipSeconds by remember { mutableIntStateOf(initial.clipSeconds) }
+    var savedAt by remember { mutableLongStateOf(initial.savedAt) }
+
     var recording by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
     var error by remember { mutableStateOf<String?>(null) }
+    var existingCode by remember { mutableStateOf<String?>(null) }
+    var confirmNew by remember { mutableStateOf(false) }
+
+    fun currentDraft() = OrderDraft(
+        platform = platform.firstOrNull() ?: "",
+        orderRef = orderRef,
+        packer = packer,
+        foodType = foodType.first(),
+        tempText = tempText,
+        clipPath = clip?.absolutePath,
+        clipSeconds = clipSeconds,
+    )
+
+    /** Saves progress on the phone. Returns false when there was nothing to save. */
+    fun saveDraft(): Boolean {
+        val d = currentDraft()
+        if (d.isEmpty) return false
+        val saved = vm.saveDraft(d)
+        clip = saved.clipPath?.let { File(it) }
+        savedAt = saved.savedAt
+        return true
+    }
+
+    fun resetAll() {
+        vm.clearDraft()
+        platform = setOf(); orderRef = ""; foodType = setOf("Hot"); tempText = ""
+        clip = null; clipSeconds = 0; savedAt = 0L
+        packer = vm.lastPackerName
+        error = null; existingCode = null
+    }
+
+    fun leave() {
+        if (!working) saveDraft()
+        onBack()
+    }
+    BackHandler(enabled = !recording) { leave() }
 
     val k = kitchen
     if (k == null) { CenteredLoading(); return }
@@ -77,27 +132,57 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
         CameraCapture(
             mode = CaptureMode.VIDEO,
             hint = "Show the sealed containers going into the bag and the bag being closed. Keep spices and recipe cards out of frame.",
-            onCaptured = { f, s -> clip = f; clipSeconds = s; recording = false },
+            onCaptured = { f, s ->
+                clip = f; clipSeconds = s; recording = false
+                saveDraft() // never lose a recorded clip
+            },
             onCancel = { recording = false },
         )
         return
     }
 
+    if (confirmNew) {
+        AlertDialog(
+            onDismissRequest = { confirmNew = false },
+            title = { Text("Start a new order?") },
+            text = { Text("This clears the platform, order number, temperature and recorded clip of the current order. It cannot be undone.") },
+            confirmButton = { TextButton(onClick = { resetAll(); confirmNew = false }) { Text("Clear and start new") } },
+            dismissButton = { TextButton(onClick = { confirmNew = false }) { Text("Keep this order") } },
+        )
+    }
+
     val temp = tempText.replace(',', '.').toDoubleOrNull()
     val tempOk = temp != null && HygieneScore.temperatureOk(foodType.first(), temp)
+    val needsOrderNo = platform.firstOrNull() != DIRECT
 
     Scaffold(
-        topBar = { BackBar("Pack an order", onBack) },
+        topBar = { BackBar("Pack an order") { leave() } },
         containerColor = MaterialTheme.colorScheme.background,
     ) { pad ->
         Column(
             Modifier.fillMaxSize().padding(pad).imePadding().padding(horizontal = 16.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            ChipPicker("Order platform", PLATFORMS, platform, multi = false) { platform = it }
+            // ---- draft status + New order ----
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (savedAt > 0) "Draft saved ${timeAgo(savedAt)}. You can leave and continue later from Home."
+                        else "New order. Use \"Save draft\" to keep progress and continue later.",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { confirmNew = true }, enabled = !working) {
+                        Icon(Icons.Filled.AddCircle, null); Spacer(Modifier.size(4.dp)); Text("New order")
+                    }
+                }
+            }
+
+            ChipPicker("Order platform", PLATFORMS, platform, multi = false) { platform = it; existingCode = null }
             OutlinedTextField(
-                orderRef, { orderRef = it.take(30) },
-                label = { Text("Platform order number (customers see last 4 digits)") },
+                orderRef, { orderRef = it.take(30); existingCode = null },
+                label = { Text(if (needsOrderNo) "Platform order number (required)" else "Order number (optional)") },
+                supportingText = { Text("The QR seal is linked to this number. Customers can also find their order by it.") },
                 singleLine = true, modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(packer, { packer = it }, label = { Text("Packed by (first name is shown)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -136,7 +221,7 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.CheckCircle, null, tint = Ok)
                             Spacer(Modifier.size(8.dp))
-                            Text("Clip recorded ($clipSeconds s)")
+                            Text("Clip recorded ($clipSeconds s) and saved in the draft")
                         }
                     }
                     OutlinedButton(onClick = { recording = true }, enabled = !working, modifier = Modifier.fillMaxWidth()) {
@@ -147,21 +232,42 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
             }
 
             ErrorText(error)
+            val dup = existingCode
+            if (dup != null) {
+                OutlinedButton(onClick = { resetAll(); onCreated(dup) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Open the existing seal for this order")
+                }
+            }
             if (working) LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+
+            OutlinedButton(
+                onClick = {
+                    error = if (saveDraft()) null else "Nothing to save yet. Fill in at least one field."
+                },
+                enabled = !working,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+            ) {
+                Icon(Icons.Filled.Save, null); Spacer(Modifier.size(8.dp)); Text("Save draft")
+            }
+
             Button(
                 enabled = !working,
                 modifier = Modifier.fillMaxWidth().height(56.dp),
+                colors = ButtonDefaults.buttonColors(),
                 onClick = {
                     val c = clip
+                    existingCode = null
                     error = when {
                         platform.isEmpty() -> "Choose the order platform"
+                        needsOrderNo && orderRef.isBlank() -> "Enter the ${platform.first()} order number"
                         packer.isBlank() -> "Enter the packer's name"
                         temp == null -> "Enter the temperature reading"
                         temp < -30 || temp > 120 -> "That temperature looks wrong. Check the probe."
-                        c == null -> "Record the packing clip"
+                        c == null || !c.exists() -> "Record the packing clip"
                         else -> null
                     }
                     if (error == null && c != null && temp != null) {
+                        saveDraft()
                         working = true
                         progress = 0f
                         vm.lastPackerName = packer.trim()
@@ -170,11 +276,15 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
                                 val order = vm.repo.createOrder(
                                     kitchen = k, platform = platform.first(), orderRef = orderRef.trim(),
                                     packerName = packer, foodType = foodType.first(), tempC = temp,
-                                    clip = c, onProgress = { progress = it },
+                                    clip = clip ?: c, onProgress = { progress = it },
                                 )
+                                vm.clearDraft()
                                 onCreated(order.code)
+                            } catch (e: DuplicateOrderException) {
+                                error = e.message
+                                existingCode = e.existingCode
                             } catch (e: Exception) {
-                                error = "Upload failed: ${e.message}. Check internet and try again."
+                                error = "Upload failed: ${e.message}. Your draft is saved; check internet and try again."
                             } finally { working = false }
                         }
                     }

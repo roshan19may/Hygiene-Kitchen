@@ -84,7 +84,8 @@ private fun CustomerView(o: Map<String, Any?>, modifier: Modifier) {
             style = MaterialTheme.typography.bodySmall,
         )
         Text(
-            "${o["platform"]} order ··${o["orderRefLast4"]} · packed ${formatDateTime(packedAt)} by ${o["packerName"]}",
+            "${o["platform"]} order #${(o["orderRef"] as? String)?.ifBlank { null } ?: "··${o["orderRefLast4"]}"}" +
+                " · packed ${formatDateTime(packedAt)} by ${o["packerName"]}",
             style = MaterialTheme.typography.bodyMedium,
         )
 

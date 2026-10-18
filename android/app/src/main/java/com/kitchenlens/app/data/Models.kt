@@ -58,6 +58,7 @@ data class OrderSummary(
     val code: String,
     val platform: String,
     val orderRefLast4: String,
+    val orderRef: String = "",
     val tempC: Double,
     val score: Int,
     val packedAtMillis: Long,

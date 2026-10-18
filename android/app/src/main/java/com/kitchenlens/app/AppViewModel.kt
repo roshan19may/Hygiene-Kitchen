@@ -4,10 +4,12 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.FirebaseApp
+import com.kitchenlens.app.data.DraftStore
 import com.kitchenlens.app.data.FirebaseRepository
 import com.kitchenlens.app.data.Kitchen
 import com.kitchenlens.app.data.KitchenRepository
 import com.kitchenlens.app.data.LocalRepository
+import com.kitchenlens.app.data.OrderDraft
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -38,6 +40,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Remembered between orders so packers don't retype their name every time. */
     var lastPackerName: String = ""
+
+    /** The order being packed, saved on the phone until its QR seal is created. */
+    private val draftStore = DraftStore(app)
+    private val _draft = MutableStateFlow(draftStore.load())
+    val draft: StateFlow<OrderDraft?> = _draft.asStateFlow()
+
+    fun saveDraft(d: OrderDraft): OrderDraft {
+        if (d.isEmpty) { clearDraft(); return d }
+        val saved = draftStore.save(d)
+        _draft.value = saved
+        return saved
+    }
+
+    /** "New order": throws away the saved draft and its clip. */
+    fun clearDraft() {
+        draftStore.clear()
+        _draft.value = null
+    }
 
     private var kitchenJob: Job? = null
 

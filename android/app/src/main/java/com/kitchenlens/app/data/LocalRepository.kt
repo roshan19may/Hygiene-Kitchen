@@ -137,6 +137,7 @@ class LocalRepository(context: Context) : KitchenRepository {
         kitchen: Kitchen, platform: String, orderRef: String, packerName: String,
         foodType: String, tempC: Double, clip: File, onProgress: (Float) -> Unit,
     ): OrderSummary = withContext(Dispatchers.IO) {
+        findOrderCode(platform, orderRef)?.let { throw DuplicateOrderException(it, platform, orderRef) }
         val code = QrLabel.newCode()
         val clipUrl = copyIn(clip, "mp4")
         onProgress(1f)
@@ -148,8 +149,16 @@ class LocalRepository(context: Context) : KitchenRepository {
         val orders = state.optJSONObject("orders") ?: JSONObject()
         orders.put(code, toJson(record))
         state.put("orders", orders)
+        val refs = state.optJSONObject("orderRefs") ?: JSONObject()
+        if (orderRef.isNotBlank()) refs.put(orderRefKey(platform, orderRef), code)
+        state.put("orderRefs", refs)
         save()
         orderSummaryFromMap(code, record)
+    }
+
+    override suspend fun findOrderCode(platform: String, orderRef: String): String? {
+        if (orderRef.isBlank()) return null
+        return state.optJSONObject("orderRefs")?.optString(orderRefKey(platform, orderRef))?.ifBlank { null }
     }
 
     @Suppress("UNCHECKED_CAST")

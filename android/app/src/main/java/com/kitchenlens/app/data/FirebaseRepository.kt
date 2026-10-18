@@ -158,6 +158,8 @@ class FirebaseRepository : KitchenRepository {
         kitchen: Kitchen, platform: String, orderRef: String, packerName: String,
         foodType: String, tempC: Double, clip: File, onProgress: (Float) -> Unit,
     ): OrderSummary {
+        val refKey = orderRefKey(platform, orderRef)
+        findOrderCode(platform, orderRef)?.let { throw DuplicateOrderException(it, platform, orderRef) }
         var code = QrLabel.newCode()
         repeat(3) { if (db.collection("orders").document(code).get().await().exists()) code = QrLabel.newCode() }
 
@@ -170,6 +172,10 @@ class FirebaseRepository : KitchenRepository {
 
         db.batch()
             .set(db.collection("orders").document(code), record + ("createdAt" to FieldValue.serverTimestamp()))
+            // Public index: platform + order number -> seal code (customers can look up by order number)
+            .set(db.collection("orderRefs").document(refKey), mapOf(
+                "code" to code, "kitchenId" to kitchen.id, "createdAt" to FieldValue.serverTimestamp(),
+            ))
             // Private kitchen record keeps the full platform order number
             .set(db.collection("kitchens").document(kitchen.id).collection("logs").document(), mapOf(
                 "section" to Section.PACKING.name, "key" to Section.PACKING.name,
@@ -181,6 +187,12 @@ class FirebaseRepository : KitchenRepository {
             ))
             .commit().await()
         return orderSummaryFromMap(code, record)
+    }
+
+    override suspend fun findOrderCode(platform: String, orderRef: String): String? {
+        if (orderRef.isBlank()) return null
+        val snap = db.collection("orderRefs").document(orderRefKey(platform, orderRef)).get().await()
+        return if (snap.exists()) snap.getString("code") else null
     }
 
     override suspend fun recentOrders(kitchenId: String): List<OrderSummary> =

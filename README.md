@@ -101,10 +101,21 @@ GST number (GSTIN, optional, format-checked). Customers see FSSAI and GSTIN on e
 | Staff cooking hygiene | 5–20 s clip, checklist (hand-wash, cap, gloves…), shift | Clip, checks done, checks **not** done |
 | Pest control | Photo of service report, vendor, service date, next due | Vendor and next due date |
 
-**Per order (about 30 seconds):** choose the platform, enter the order number and
-the probe temperature, record a 5–20 s packing clip, and tap **Create QR seal**.
-Share the label image to a Bluetooth thermal-printer app (58 mm labels) and stick it
-across the bag opening.
+**Per order (about 30 seconds):** tap **New order + QR seal**, choose the platform, enter the
+**platform order number** (required except for direct orders), the probe temperature, and record a
+5–20 s packing clip, then tap **Create QR seal**. Share the label image to a Bluetooth
+thermal-printer app (58 mm labels) and stick it across the bag opening.
+
+- **Save draft** keeps the order on the phone; leaving the screen or recording a clip saves it
+  automatically. Home shows "Order in progress" with **Continue this order**.
+- **New order** clears the current order (after a confirmation) and starts from the beginning.
+- Each seal is linked to its platform order number. The app refuses a second seal for the same
+  order number and offers to open the existing one. **Recent orders** can be searched by order number.
+- Customers can scan the seal, or open the scan page and look up their order by platform and
+  order number (`.../?p=Swiggy&o=158823344471` also works).
+- **Demo mode:** the QR link itself carries the order details (kitchen, order number,
+  temperature, score, hygiene timeline). Photos and clips are too large for a QR code, so they
+  appear on the customer page only after Firebase cloud storage is connected (section 2).
 
 **Built-in checks**
 

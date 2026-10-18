@@ -45,7 +45,9 @@ import androidx.compose.ui.unit.dp
 import com.kitchenlens.app.AppViewModel
 import com.kitchenlens.app.BuildConfig
 import com.kitchenlens.app.data.OrderSummary
+import com.kitchenlens.app.util.OfflineSeal
 import com.kitchenlens.app.util.QrLabel
+import androidx.compose.material3.OutlinedTextField
 
 fun scanUrl(code: String) = BuildConfig.SCAN_BASE_URL + code
 
@@ -67,7 +69,13 @@ fun QrResultScreen(
     val kitchenName = o?.get("kitchenName") as? String ?: ""
     val temp = (o?.get("tempC") as? Number)?.toDouble()
     val tempText = if (temp != null) "Packed at %.0f°C".format(temp) else ""
-    val label = remember(o) { QrLabel.labelBitmap(scanUrl(code), code, kitchenName, tempText) }
+    // Demo mode keeps media on the phone, so the order details travel inside the QR link itself.
+    val url = remember(o) { if (vm.repo.isDemo && o != null) OfflineSeal.url(BuildConfig.SCAN_BASE_URL, code, o) else scanUrl(code) }
+    val label = remember(url) { QrLabel.labelBitmap(url, code, kitchenName, tempText) }
+    val orderLine = o?.let {
+        val ref = (it["orderRef"] as? String)?.ifBlank { null } ?: (it["orderRefLast4"] as? String)?.let { l -> "··$l" } ?: ""
+        "${it["platform"] ?: ""} order #$ref"
+    }
 
     Scaffold(topBar = { BackBar("QR seal ready", onHome) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
         Column(
@@ -83,7 +91,15 @@ fun QrResultScreen(
                     modifier = Modifier.width(280.dp).background(Color.White).padding(8.dp),
                 )
             }
+            if (orderLine != null) Text(orderLine, fontWeight = FontWeight.SemiBold)
             Text(scanUrl(code), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+            if (vm.repo.isDemo) {
+                Text(
+                    "Demo mode: this QR carries the order details (kitchen, order number, temperature, score and hygiene timeline). " +
+                        "Photos and clips appear on the customer page once Firebase cloud storage is connected (README, section 2).",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             Button(onClick = { QrLabel.share(context, label, code) }, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Filled.Print, null); Spacer(Modifier.size(8.dp)); Text("Print / share seal")
             }
@@ -107,23 +123,36 @@ fun OrdersScreen(vm: AppViewModel, kitchenId: String, onOpen: (String) -> Unit, 
     LaunchedEffect(kitchenId) {
         orders = runCatching { vm.repo.recentOrders(kitchenId) }.onFailure { error = it.message }.getOrDefault(emptyList())
     }
+    var query by remember { mutableStateOf("") }
     Scaffold(topBar = { BackBar("Recent orders", onBack) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
-        val list = orders
+        val q = query.filter { it.isLetterOrDigit() }.uppercase()
+        val list = orders?.filter { o ->
+            q.isEmpty() || o.orderRef.uppercase().filter { it.isLetterOrDigit() }.contains(q) || o.code.contains(q)
+        }
         when {
             list == null -> CenteredLoading()
             list.isEmpty() -> Column(Modifier.padding(pad).padding(16.dp)) {
                 ErrorText(error)
-                Text("No orders packed yet.")
+                if (query.isNotBlank()) {
+                    OutlinedTextField(query, { query = it }, label = { Text("Search by order number or seal code") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Text("No orders match \"$query\".")
+                } else Text("No orders packed yet.")
             }
             else -> LazyColumn(
                 Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                item {
+                    OutlinedTextField(
+                        query, { query = it }, label = { Text("Search by order number or seal code") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 items(list, key = { it.code }) { o ->
                     Card(Modifier.fillMaxWidth().clickable { onOpen(o.code) }) {
                         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("${o.platform} ··${o.orderRefLast4}", fontWeight = FontWeight.SemiBold)
+                                Text("${o.platform} #${o.orderRef.ifBlank { "··" + o.orderRefLast4 }}", fontWeight = FontWeight.SemiBold)
                                 Text(
                                     "${formatDateTime(o.packedAtMillis)} · %.0f°C · code ${o.code}".format(o.tempC),
                                     style = MaterialTheme.typography.bodySmall,

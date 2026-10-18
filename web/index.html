@@ -112,6 +112,17 @@ a { color: var(--leaf); font-weight: 700; }
   background: var(--leaf-soft); color: var(--leaf); font-weight: 700; text-align: center; padding: 12px;
 }
 
+.lookup { display: flex; flex-direction: column; gap: 8px; }
+.lookup label { font-weight: 700; font-size: .875rem; }
+.lookup select, .lookup input {
+  font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--ink); width: 100%; max-width: 100%;
+}
+.lookup button {
+  font: inherit; font-weight: 700; padding: 12px; border-radius: 10px; border: 0; cursor: pointer;
+  background: var(--leaf); color: var(--surface);
+}
+.lookup :focus-visible { outline: 2px solid var(--leaf); outline-offset: 2px; }
 .note { border-top: 1px solid var(--line); padding-top: 14px; font-size: .85rem; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
 .demo { background: var(--leaf-soft); color: var(--ink); border-radius: 10px; padding: 10px 12px; font-size: .875rem; }
 .err { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
@@ -150,7 +161,7 @@ a { color: var(--leaf); font-weight: 700; }
     var m = location.pathname.match(/\/o\/([A-Za-z0-9]{4,16})\/?$/);
     if (m) return m[1].toUpperCase();
     var h = location.hash.replace("#", "");
-    return h ? h.toUpperCase() : "DEMO";
+    return h ? h.toUpperCase() : "";
   }
 
   /* Firestore REST values -> plain JS */
@@ -178,6 +189,49 @@ a { color: var(--leaf); font-weight: 700; }
     });
   }
 
+  /* Platform + order number -> lookup key (same rule as the app's orderRefKey) */
+  function refKey(platform, ref) {
+    function clean(x) { return String(x || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); }
+    return clean(platform) + "_" + clean(ref);
+  }
+  function fetchCodeByRef(platform, ref) {
+    var url = "https://firestore.googleapis.com/v1/projects/" + encodeURIComponent(CFG.projectId) +
+      "/databases/(default)/documents/orderRefs/" + encodeURIComponent(refKey(platform, ref)) + "?key=" + encodeURIComponent(CFG.apiKey);
+    return fetch(url).then(function (r) {
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error("Server responded " + r.status);
+      return r.json().then(function (d) { return decodeFields(d.fields || {}).code || null; });
+    });
+  }
+
+  /* Demo-mode seals carry the order inside the link: "z" + base64url(deflate-raw(json)) */
+  function decodePayload(s) {
+    if (!s || s.charAt(0) !== "z") return Promise.reject(new Error("format"));
+    if (typeof DecompressionStream === "undefined") return Promise.reject(new Error("browser"));
+    var b = s.slice(1).replace(/-/g, "+").replace(/_/g, "/");
+    while (b.length % 4) b += "=";
+    var bin = atob(b), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return new Response(stream).text().then(JSON.parse);
+  }
+  function fromOffline(p) {
+    var packed = (p.pt || 0) * 60000, snap = {};
+    (p.r || []).forEach(function (r, i) {
+      var c = String(r[0] || ""), label, type;
+      if (c === "U") { label = "Utensils cleaned"; type = "video"; }
+      else if (c === "S") { label = "Staff hygiene check"; type = "video"; }
+      else if (c === "P") { label = "Pest control service"; type = "photo"; }
+      else { label = c.slice(1) + " received"; type = "photo"; }
+      snap["r" + i] = { at: packed - (r[1] || 0) * 60000, label: label, mediaType: type, mediaUrl: "", details: { note: r[2] } };
+    });
+    return {
+      offline: true, kitchenName: p.k, kitchenLocality: p.a, kitchenCity: "", fssai: p.f, gstin: p.g,
+      platform: p.p, orderRef: p.o, packerName: p.n, foodType: p.ft === "C" ? "Cold" : "Hot",
+      tempC: p.t, tempOk: !!p.tk, score: p.s, packedAtMillis: packed, clipUrl: "", snapshot: snap
+    };
+  }
+
   function demoOrder() {
     var now = Date.now();
     var p = now - 9 * 60000;
@@ -193,7 +247,7 @@ a { color: var(--leaf); font-weight: 700; }
     snap.PEST = e("Pest control service", 24 * 14, "photo", { vendor: "SafeHome Pest Services", nextDueDate: "in 16 days" });
     return {
       demo: true, kitchenName: "Biryani Box", kitchenLocality: "HSR Layout", kitchenCity: "Bengaluru",
-      fssai: "11223344556677", gstin: "29ABCDE1234F1ZW", platform: "Swiggy", orderRefLast4: "4471", packerName: "Asha",
+      fssai: "11223344556677", gstin: "29ABCDE1234F1ZW", platform: "Swiggy", orderRef: "158823344471", orderRefLast4: "4471", packerName: "Asha",
       foodType: "Hot", tempC: 71, tempOk: true, score: 90, packedAtMillis: p, clipUrl: "", snapshot: snap
     };
   }
@@ -214,12 +268,12 @@ a { color: var(--leaf); font-weight: 700; }
     return [
       pc > 1 && (pc + " photos"), d.billDate && ("bill dated " + d.billDate), bc > 1 && (bc + " bills"),
       d.supplierGst && "GST-registered supplier", d.supplierType, d.cleaningMedium, d.checklist,
-      d.missing && ("not shown: " + d.missing), d.vendor && ("by " + d.vendor), d.nextDueDate && ("next due " + d.nextDueDate)
+      d.missing && ("not shown: " + d.missing), d.vendor && ("by " + d.vendor), d.nextDueDate && ("next due " + d.nextDueDate), d.note
     ].filter(Boolean).join(" · ");
   }
   function tone(score) { return score >= 80 ? "ok" : score >= 50 ? "warn" : "bad"; }
 
-  function mediaHtml(entry, demo) {
+  function mediaHtml(entry, demo, offline) {
     var url = safeUrl(entry.mediaUrl);
     var many = (entry.mediaUrls || []).map(safeUrl).filter(Boolean);
     if (entry.mediaType !== "video" && many.length > 1) {
@@ -227,6 +281,7 @@ a { color: var(--leaf); font-weight: 700; }
         return '<img src="' + esc(u) + '" alt="' + esc(entry.label) + " photo " + (i + 1) + '" loading="lazy">';
       }).join("") + "</div>";
     }
+    if (!url && offline) return '<div class="placeholder">This ' + (entry.mediaType === "video" ? "clip" : "photo") + " is stored on the kitchen's phone. It appears here once the kitchen connects cloud storage.</div>";
     if (!url) return '<div class="placeholder">' + (demo ? "Sample: the kitchen's " + (entry.mediaType === "video" ? "clip" : "photo") + " appears here" : "Media unavailable") + "</div>";
     return entry.mediaType === "video"
       ? '<video src="' + esc(url) + '" controls muted playsinline preload="metadata"></video>'
@@ -237,15 +292,16 @@ a { color: var(--leaf); font-weight: 700; }
     var app = document.getElementById("app");
     var snap = o.snapshot || {};
     var packed = o.packedAtMillis || 0;
-    var rows = [];
-    CATS.forEach(function (c) { if (snap[invKey(c)]) rows.push(snap[invKey(c)]); });
-    ["UTENSILS", "STAFF", "PEST"].forEach(function (k) { if (snap[k]) rows.push(snap[k]); });
+    var rows = Object.keys(snap).map(function (k) { return snap[k]; })
+      .filter(function (r) { return r && typeof r.at === "number" && r.label; });
     rows.sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
 
     var clipUrl = safeUrl(o.clipUrl);
     var clip = clipUrl
       ? '<video src="' + esc(clipUrl) + '" controls muted playsinline autoplay loop preload="auto"></video>'
-      : '<div class="placeholder">' + (o.demo ? "Sample order: the 18-second packing clip plays here" : "Clip not available") + "</div>";
+      : '<div class="placeholder">' + (o.demo ? "Sample order: the 18-second packing clip plays here"
+        : o.offline ? "The packing clip was recorded and is stored on the kitchen's phone. It appears here once the kitchen connects cloud storage."
+        : "Clip not available") + "</div>";
 
     var tempTone = o.tempOk ? "ok" : "bad";
     var tempNote = o.tempOk ? (o.foodType === "Cold" ? "Kept cold (5°C or below)" : "Hot and safe (60°C or above)")
@@ -268,12 +324,12 @@ a { color: var(--leaf); font-weight: 700; }
         '<div class="stamp" aria-hidden="true"><div><b>SEALED</b><span>' + esc(code.slice(0, 4)) + "<br>" + esc(code.slice(4)) + "</span></div></div>" +
         '<div class="kitchen"><span class="eyebrow">How your food was packed</span>' +
         "<h1>" + esc(o.kitchenName) + "</h1>" +
-        '<span class="muted small">' + esc(o.kitchenLocality) + ", " + esc(o.kitchenCity) + ' · FSSAI <span class="mono">' + esc(o.fssai) + "</span>" +
+        '<span class="muted small">' + esc([o.kitchenLocality, o.kitchenCity].filter(Boolean).join(", ")) + ' · FSSAI <span class="mono">' + esc(o.fssai) + "</span>" +
         (o.gstin ? ' · GSTIN <span class="mono">' + esc(o.gstin) + "</span>" : "") + "</span></div>" +
       "</section>" +
       '<figure class="clip" style="margin:0">' + clip +
         '<figcaption><span><b>Packing clip</b> · no sound</span><span class="muted small">' +
-        esc(o.platform) + ' order ··<span class="mono">' + esc(o.orderRefLast4) + "</span></span></figcaption></figure>" +
+        esc(o.platform) + ' order <span class="mono">#' + esc(o.orderRef || ("··" + (o.orderRefLast4 || ""))) + "</span></span></figcaption></figure>" +
       '<section class="stats">' +
         '<div class="stat"><div class="v ' + tempTone + '">' + esc(Math.round(o.tempC)) + '°C</div><div class="l">' + esc(tempNote) + "</div></div>" +
         '<div class="stat"><div class="v ' + tone(o.score) + '">' + esc(o.score) + '<span class="small muted">/100</span></div><div class="l">Kitchen hygiene score at packing</div></div>' +
@@ -291,27 +347,77 @@ a { color: var(--leaf); font-weight: 700; }
         var i = b.getAttribute("data-i");
         var box = app.querySelector('[data-m="' + i + '"]');
         var open = box.hidden;
-        if (open && !box.innerHTML) box.innerHTML = mediaHtml(rows[i], o.demo);
+        if (open && !box.innerHTML) box.innerHTML = mediaHtml(rows[i], o.demo, o.offline);
         box.hidden = !open;
         b.setAttribute("aria-expanded", String(open));
         b.querySelector(".act").textContent = open ? "Hide" : (rows[i].mediaType === "video" ? "Watch" : "View");
       });
     });
+    if (o.offline) {
+      app.insertAdjacentHTML("afterbegin", '<div class="demo">Order details below were saved inside this seal. Photos and clips are kept on the kitchen\'s phone until it connects cloud storage.</div>');
+    }
     document.title = o.kitchenName ? o.kitchenName + " · Seal " + code : "KitchenLens Seal";
   }
 
-  function showError(msg) {
+  function showError(msg, withLookup) {
     document.getElementById("app").innerHTML = '<div class="err"><h2>Seal not found</h2><p class="muted">' + esc(msg) + "</p></div>";
+    if (withLookup) showLookup(true);
   }
 
+  var PLATFORMS = ["Swiggy", "Zomato", "Ownly", "Toing", "Direct / Other"];
+  /* Customers can find their order with the platform order number shown in their app */
+  function showLookup(append) {
+    var html = '<form class="err lookup" id="lookup"><h2>Find your order</h2>' +
+      '<p class="muted small">Enter the order number shown in your Swiggy, Zomato or other app.</p>' +
+      '<label for="lk-p">Ordered on</label><select id="lk-p">' +
+      PLATFORMS.map(function (p) { return "<option>" + esc(p) + "</option>"; }).join("") + "</select>" +
+      '<label for="lk-o">Order number</label><input id="lk-o" inputmode="text" autocomplete="off" required>' +
+      '<button type="submit">Show how my food was packed</button><p class="muted small" id="lk-msg" aria-live="polite"></p></form>';
+    var app = document.getElementById("app");
+    if (append) app.insertAdjacentHTML("beforeend", html); else app.innerHTML = html;
+    document.getElementById("lookup").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var p = document.getElementById("lk-p").value, ref = document.getElementById("lk-o").value.trim();
+      var msg = document.getElementById("lk-msg");
+      if (!ref) { msg.textContent = "Enter your order number."; return; }
+      msg.textContent = "Looking up your order…";
+      fetchCodeByRef(p, ref).then(function (c) {
+        if (!c) { msg.textContent = "No seal found for " + p + " order " + ref + ". Check the number, or scan the QR on your bag."; return; }
+        return fetchOrder(c).then(function (o) { if (o) render(o, c); else msg.textContent = "This order's seal could not be loaded."; });
+      }).catch(function () { msg.textContent = "We could not reach the server. Check your internet connection and try again."; });
+    });
+  }
+
+  var params = new URLSearchParams(location.search);
+  var payload = params.get("d");
   var code = readCode();
   var configured = CFG.projectId && CFG.apiKey && CFG.projectId !== "kitchenlens-demo";
-  if (code === "DEMO" || !configured) {
-    render(demoOrder(), code === "DEMO" ? "DEMO2026" : code);
+
+  if (payload) {
+    decodePayload(payload).then(function (p) { render(fromOffline(p), code || "SEAL"); }).catch(function (e) {
+      showError(e && e.message === "browser"
+        ? "Your browser is too old to read this seal. Open the link in a recent version of Chrome or Safari."
+        : "This seal's details could not be read. Ask the restaurant to reprint the seal.");
+    });
     return;
   }
+  if (code === "DEMO" || (!configured && code)) {
+    render(demoOrder(), code === "DEMO" || !code ? "DEMO2026" : code);
+    return;
+  }
+  if (!configured) { render(demoOrder(), "DEMO2026"); return; }
+
+  var byRef = params.get("o");
+  if (!code && byRef) {
+    fetchCodeByRef(params.get("p") || "Swiggy", byRef).then(function (c) {
+      if (!c) { showError("No seal found for order " + byRef + ".", true); return; }
+      return fetchOrder(c).then(function (o) { if (o) render(o, c); else showError("This order's seal could not be loaded.", true); });
+    }).catch(function () { showError("We could not load this order right now. Check your internet connection and try again."); });
+    return;
+  }
+  if (!code) { showLookup(false); return; }
   fetchOrder(code).then(function (o) {
-    if (!o) showError("No order matches code " + code + ". Check the code printed on the seal, or contact the restaurant.");
+    if (!o) showError("No order matches code " + code + ". Check the code printed on the seal, or look up your order number below.", true);
     else render(o, code);
   }).catch(function () {
     showError("We could not load this order right now. Check your internet connection and scan again.");

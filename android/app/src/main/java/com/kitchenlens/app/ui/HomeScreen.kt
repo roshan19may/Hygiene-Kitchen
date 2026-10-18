@@ -35,6 +35,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -91,7 +96,20 @@ fun HomeScreen(
     onEditKitchen: () -> Unit,
 ) {
     val kitchen by vm.kitchen.collectAsStateWithLifecycle()
+    val draft by vm.draft.collectAsStateWithLifecycle()
+    var confirmNew by remember { mutableStateOf(false) }
     val k = kitchen
+    if (confirmNew) {
+        AlertDialog(
+            onDismissRequest = { confirmNew = false },
+            title = { Text("Start a new order?") },
+            text = { Text("The saved order in progress and its clip will be cleared.") },
+            confirmButton = {
+                TextButton(onClick = { vm.clearDraft(); confirmNew = false; onPack() }) { Text("Clear and start new") }
+            },
+            dismissButton = { TextButton(onClick = { confirmNew = false }) { Text("Keep it") } },
+        )
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -134,6 +152,15 @@ fun HomeScreen(
                         "Customers see this score on every order (temperature adds the last 20 points).",
                         color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodySmall,
                     )
+                    val d = draft
+                    if (d != null) {
+                        Text(
+                            "Order in progress: ${d.platform.ifBlank { "platform not chosen" }}" +
+                                (if (d.orderRef.isNotBlank()) " #${d.orderRef}" else "") +
+                                " · saved ${timeAgo(d.savedAt)}",
+                            color = Color.White, style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                     Button(
                         onClick = onPack,
                         modifier = Modifier.fillMaxWidth(),
@@ -143,7 +170,14 @@ fun HomeScreen(
                     ) {
                         Icon(Icons.Filled.QrCode2, null)
                         Spacer(Modifier.size(8.dp))
-                        Text("Pack an order + print QR seal", fontWeight = FontWeight.Bold)
+                        Text(if (d != null) "Continue this order" else "New order + QR seal", fontWeight = FontWeight.Bold)
+                    }
+                    if (d != null) {
+                        OutlinedButton(
+                            onClick = { confirmNew = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                        ) { Text("New order (clear the saved one)") }
                     }
                 }
             }

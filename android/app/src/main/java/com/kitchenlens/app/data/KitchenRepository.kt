@@ -67,9 +67,23 @@ interface KitchenRepository {
 
     suspend fun recentOrders(kitchenId: String): List<OrderSummary>
 
+    /** The seal code already created for this platform order number, if any. */
+    suspend fun findOrderCode(platform: String, orderRef: String): String?
+
     /** The same public record the customer page shows when the QR is scanned. */
     suspend fun getOrder(code: String): Map<String, Any?>?
 }
+
+/** Thrown when a QR seal already exists for the same platform order number. */
+class DuplicateOrderException(val existingCode: String, platform: String, orderRef: String) :
+    Exception("A QR seal already exists for $platform order $orderRef (code $existingCode). Open it from Recent orders to reprint.")
+
+/**
+ * Lookup key that links a seal to the platform order number, e.g. "SWIGGY_158823341".
+ * The scan page builds the same key so customers can also find their order by number.
+ */
+fun orderRefKey(platform: String, orderRef: String): String =
+    platform.uppercase().filter { it.isLetterOrDigit() } + "_" + orderRef.uppercase().filter { it.isLetterOrDigit() }
 
 /** Detail keys that are kept in the private log only, never shown to customers. */
 val PRIVATE_DETAIL_KEYS = setOf("billUrl", "billUrls", "supplierGstins")
@@ -152,6 +166,7 @@ fun orderSummaryFromMap(code: String, m: Map<String, Any?>) = OrderSummary(
     code = code,
     platform = m["platform"] as? String ?: "",
     orderRefLast4 = m["orderRefLast4"] as? String ?: "",
+    orderRef = m["orderRef"] as? String ?: "",
     tempC = (m["tempC"] as? Number)?.toDouble() ?: 0.0,
     score = (m["score"] as? Number)?.toInt() ?: 0,
     packedAtMillis = (m["packedAtMillis"] as? Number)?.toLong() ?: 0L,
@@ -177,6 +192,8 @@ fun buildOrderRecord(
     "fssai" to kitchen.fssai,
     "gstin" to kitchen.gstin,
     "platform" to platform,
+    "orderRef" to orderRef.trim(),
+    "orderRefKey" to orderRefKey(platform, orderRef),
     "orderRefLast4" to orderRef.filter { it.isLetterOrDigit() }.takeLast(4),
     // First name only, for staff privacy
     "packerName" to packerName.trim().split(" ").first(),

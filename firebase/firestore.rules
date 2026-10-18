@@ -28,6 +28,14 @@ service cloud.firestore {
       }
     }
 
+    // Platform order number -> seal code. Lets customers find their order by number.
+    // Created once with the order; never changed, never listable.
+    match /orderRefs/{key} {
+      allow get: if true;
+      allow create: if signedIn() && request.resource.data.kitchenId == myKitchen();
+      allow update, delete: if false;
+    }
+
     // Public order records: anyone with the exact code can open one (the QR scan),
     // but nobody can list or browse all orders.
     match /orders/{code} {

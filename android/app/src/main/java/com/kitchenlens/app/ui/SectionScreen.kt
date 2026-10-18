@@ -20,6 +20,9 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -62,6 +65,43 @@ private val SECTION_HINTS = mapOf(
     Section.STAFF to "Record each staff member washing hands with soap, then show cap, gloves and apron.",
     Section.PEST to "Photograph the pest-control service report showing the vendor and date.",
 )
+
+private const val MIN_STAFF_CHECKS = 2
+
+/** Tick-box list for the staff hygiene checks shown in the clip; at least two are required. */
+@Composable
+private fun StaffChecklist(selected: Set<String>, onChange: (Set<String>) -> Unit) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(vertical = 8.dp)) {
+            Text(
+                "Checks shown in the clip (select at least $MIN_STAFF_CHECKS)",
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+            STAFF_CHECKLIST.forEach { item ->
+                val on = item in selected
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .toggleable(value = on, role = Role.Checkbox) { onChange(if (it) selected + item else selected - item) }
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(checked = on, onCheckedChange = null)
+                    Spacer(Modifier.size(8.dp))
+                    Text(item)
+                }
+            }
+            Text(
+                "${selected.size} of ${STAFF_CHECKLIST.size} selected" +
+                    if (selected.size < MIN_STAFF_CHECKS) ": select ${MIN_STAFF_CHECKS - selected.size} more" else "",
+                color = if (selected.size < MIN_STAFF_CHECKS) Chilli else Ok,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+        }
+    }
+}
 
 /** Records one of the four daily hygiene sections (inventory, utensils, staff, pest control). */
 @Composable
@@ -129,7 +169,7 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
             Section.INVENTORY -> null // handled by InventoryScreen
             Section.UTENSILS -> if (media.isEmpty()) "Choose the cleaning medium used" else if (shift.isEmpty()) "Choose the shift" else null
             Section.STAFF -> when {
-                "Hand-wash with soap" !in checklist -> "Hand-wash with soap must be done and recorded"
+                checklist.size < MIN_STAFF_CHECKS -> "Select at least $MIN_STAFF_CHECKS hygiene checks (${checklist.size} selected)"
                 shift.isEmpty() -> "Choose the shift"
                 else -> null
             }
@@ -212,7 +252,7 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
                     ChipPicker("Shift", SHIFTS, shift, multi = false) { shift = it }
                 }
                 Section.STAFF -> {
-                    ChipPicker("Checks done on camera", STAFF_CHECKLIST, checklist, multi = true) { checklist = it }
+                    StaffChecklist(checklist) { checklist = it }
                     ChipPicker("Shift", SHIFTS, shift, multi = false) { shift = it }
                     OutlinedTextField(
                         staffCount, { staffCount = it.filter(Char::isDigit).take(2) },

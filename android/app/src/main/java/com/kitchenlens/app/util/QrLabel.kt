@@ -26,7 +26,8 @@ object QrLabel {
 
     fun qrBitmap(content: String, size: Int): Bitmap {
         val hints = mapOf(
-            EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M, // survives small smudges
+            // M survives small smudges; long demo-mode links use L to keep the code printable
+            EncodeHintType.ERROR_CORRECTION to if (content.length > 300) ErrorCorrectionLevel.L else ErrorCorrectionLevel.M,
             EncodeHintType.MARGIN to 1,
         )
         val matrix = QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, size, size, hints)
@@ -41,7 +42,7 @@ object QrLabel {
      */
     fun labelBitmap(url: String, code: String, kitchenName: String, tempText: String): Bitmap {
         val width = 384
-        val height = 560
+        val height = 590
         val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         c.drawColor(Color.WHITE)
@@ -57,11 +58,11 @@ object QrLabel {
         }
         c.drawText("SCAN: see how your", width / 2f, 36f, title)
         c.drawText("food was packed", width / 2f, 66f, title)
-        c.drawBitmap(qrBitmap(url, 320), 32f, 84f, null)
-        c.drawText(code.chunked(4).joinToString(" "), width / 2f, 446f, big)
-        c.drawText(kitchenName.take(28), width / 2f, 482f, small)
-        c.drawText(tempText, width / 2f, 510f, small)
-        c.drawText("Seal must be intact on delivery", width / 2f, 540f, small)
+        c.drawBitmap(qrBitmap(url, 352), 16f, 80f, null)
+        c.drawText(code.chunked(4).joinToString(" "), width / 2f, 470f, big)
+        c.drawText(kitchenName.take(28), width / 2f, 506f, small)
+        c.drawText(tempText, width / 2f, 534f, small)
+        c.drawText("Seal must be intact on delivery", width / 2f, 566f, small)
         return bmp
     }
 
