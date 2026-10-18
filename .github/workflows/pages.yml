@@ -1,0 +1,37 @@
+name: Publish customer scan page
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Find the scan page
+        run: |
+          found=$(find . -path "*/web/index.html" -not -path "*/node_modules/*" | head -1)
+          if [ -z "$found" ]; then
+            echo "::error::Could not find web/index.html. Check that the web folder was uploaded."
+            exit 1
+          fi
+          echo "WEB_DIR=$(dirname "$found")" >> "$GITHUB_ENV"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ env.WEB_DIR }}
+      - id: deployment
+        uses: actions/deploy-pages@v4
