@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <!--KL:HEAD-START-->
-<title>KitchenLens | Food Packing Report</title>
+<title>KitchenLens — Food Safety &amp; Hygiene Verification</title>
 <meta name="description" content="View the kitchen-recorded hygiene and food packing details linked to your order seal.">
 <meta name="theme-color" content="#176b4b">
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -80,6 +80,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .fact .value { margin-top: 4px; font-size: .93rem; font-weight: 700; overflow-wrap: anywhere; }
 .sectionhead { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
 .sectionhead p { color: var(--muted); font-size: .87rem; margin-top: 4px; }
+.stamped { position: relative; }
+.tstamp {
+  position: absolute; top: 8px; left: 8px; z-index: 1; pointer-events: none;
+  background: rgba(0, 0, 0, .66); color: #fff; border-radius: 6px; padding: 4px 8px;
+  font: 700 .74rem/1.3 var(--font-mono); font-variant-numeric: tabular-nums;
+}
 .video { border-radius: 14px; overflow: hidden; background: #edf3ef; border: 1px solid var(--line); }
 .video video, .clip video { display: block; width: 100%; max-height: 440px; object-fit: cover; background: #10231a; }
 .placeholder { min-height: 150px; display: grid; place-items: center; text-align: center; padding: 24px; color: var(--muted); background: repeating-linear-gradient(135deg, #f3f8f4 0 18px, #eaf2ec 18px 36px); }
@@ -250,6 +256,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
       offline: true, kitchenName: p.k, kitchenLocality: p.a, kitchenCity: "", fssai: p.f, gstin: p.g,
       platform: p.p, orderRef: p.o, packerName: p.n, foodType: p.ft === "C" ? "Cold" : "Hot",
       tempC: p.t, tempOk: !!p.tk, score: p.s, packedAtMillis: packed, clipUrl: cloudUrl(p.cl, p.c, true), snapshot: snap,
+      clipRecordedAt: p.cr ? packed - p.cr * 1000 : packed,
       hasCloud: !!(p.cl && p.c)
     };
   }
@@ -293,6 +300,36 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
       d.missing && ("not shown: " + d.missing), d.vendor && ("by " + d.vendor), d.nextDueDate && ("next due " + d.nextDueDate), d.note
     ].filter(Boolean).join(" · ");
   }
+  /* Date-time stamp in Indian time, e.g. "18 Oct 2026, 07:42:10 pm IST" */
+  function stampText(ms) {
+    try {
+      return new Date(ms).toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric",
+        hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true
+      }) + " IST";
+    } catch (e) { return new Date(ms).toString(); }
+  }
+  /* Video with a running timestamp: recording start + playback position */
+  function stampedVideo(url, startMs) {
+    var start = Number(startMs) || 0;
+    return '<div class="stamped" data-start="' + start + '">' +
+      (start ? '<span class="tstamp">' + esc(stampText(start)) + "</span>" : "") +
+      '<video src="' + esc(url) + '" controls muted playsinline preload="metadata"></video></div>';
+  }
+  function wireStamps(root) {
+    root.querySelectorAll(".stamped").forEach(function (box) {
+      if (box.dataset.wired) return;
+      box.dataset.wired = "1";
+      var start = Number(box.getAttribute("data-start")) || 0, v = box.querySelector("video"), t = box.querySelector(".tstamp");
+      if (!start || !v || !t) return;
+      v.addEventListener("timeupdate", function () { t.textContent = stampText(start + v.currentTime * 1000); });
+    });
+  }
+  function clipStart(entry) {
+    var d = entry.details || {};
+    return Number(d.recordedAt) || entry.at || 0;
+  }
+
   function tone(score) { return score >= 80 ? "ok" : score >= 50 ? "warn" : "bad"; }
 
   function mediaHtml(entry, demo, offline) {
@@ -306,7 +343,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     if (!url && offline) return '<div class="placeholder">This ' + (entry.mediaType === "video" ? "clip" : "photo") + " is stored on the kitchen's phone. It appears here once the kitchen connects cloud storage.</div>";
     if (!url) return '<div class="placeholder">' + (demo ? "Sample: the kitchen's " + (entry.mediaType === "video" ? "clip" : "photo") + " appears here" : "Media unavailable") + "</div>";
     return entry.mediaType === "video"
-      ? '<video src="' + esc(url) + '" controls muted playsinline preload="metadata"></video>'
+      ? stampedVideo(url, clipStart(entry))
       : '<img src="' + esc(url) + '" alt="' + esc(entry.label) + '" loading="lazy">';
   }
 
@@ -320,7 +357,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
     var clipUrl = safeUrl(o.clipUrl);
     var clip = clipUrl
-      ? '<video src="' + esc(clipUrl) + '" controls muted playsinline preload="metadata"></video>'
+      ? stampedVideo(clipUrl, o.clipRecordedAt || packed)
       : '<div class="placeholder">' + (o.demo ? "Sample packing video preview. Actual customer reports show the recorded packing clip when available."
         : o.offline ? "The packing clip is saved on the kitchen device and will appear here when cloud media is available."
         : "A packing clip is not available for this report.") + "</div>";
@@ -328,8 +365,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     var tempTone = o.tempOk ? "ok" : "bad";
     var foodType = o.foodType === "Cold" ? "Cold food" : "Hot food";
     var tempNote = o.tempOk
-      ? (o.foodType === "Cold" ? "Meets the kitchen's recorded cold-food guideline" : "Meets the kitchen's recorded hot-food guideline")
-      : (o.foodType === "Cold" ? "Outside the kitchen's recorded cold-food guideline" : "Below the kitchen's recorded hot-food guideline");
+      ? (o.foodType === "Cold" ? "At or below the 5°C cold-food guideline" : "At or above the FSSAI guideline of 65°C for hot food")
+      : (o.foodType === "Cold" ? "Above the 5°C cold-food guideline" : "Below the FSSAI guideline of 65°C for hot food");
     var tempStatus = o.tempOk ? "Guideline met" : "Review recorded";
     var scoreValue = Number(o.score);
     if (!Number.isFinite(scoreValue)) scoreValue = 0;
@@ -356,7 +393,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
       (o.demo ? '<div class="demo"><strong>Preview report</strong> — This is illustrative sample data, not a live order or verified inspection. Actual reports display the records saved by the kitchen.</div>' : "") +
       (o.offline && !o.hasCloud ? '<div class="demo">Some media is stored on the kitchen device and may not be visible until cloud storage is connected.</div>' : "") +
       '<section class="card reporthead">' +
-        '<div class="brandbar"><div class="brandmark"><div class="brandicon" aria-hidden="true">K</div><div><div class="brandname">KitchenLens</div><div class="brandtag">Food packing transparency report</div></div></div>' +
+        '<div class="brandbar"><div class="brandmark"><div class="brandicon" aria-hidden="true">K</div><div><div class="brandname">KitchenLens</div><div class="brandtag">Food Safety &amp; Hygiene Verification</div></div></div>' +
         '<span class="status-pill">Seal record</span></div>' +
         '<div class="kitchenrow"><div class="kitchen"><div class="eyebrow">Prepared by</div><h1>' + esc(o.kitchenName || "Kitchen team") + '</h1>' +
           '<div class="kitchenmeta">' + esc(kitchenLocation || "Location not provided") + '</div>' +
@@ -401,12 +438,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
         var i = b.getAttribute("data-i");
         var box = app.querySelector('[data-m="' + i + '"]');
         var open = box.hidden;
-        if (open && !box.innerHTML) box.innerHTML = mediaHtml(rows[i], o.demo, o.offline);
+        if (open && !box.innerHTML) { box.innerHTML = mediaHtml(rows[i], o.demo, o.offline); wireStamps(box); }
         box.hidden = !open;
         b.setAttribute("aria-expanded", String(open));
         b.querySelector(".act").textContent = open ? "Hide evidence −" : (rows[i].mediaType === "video" ? "View clip +" : "View evidence +");
       });
     });
+    wireStamps(app);
     var printButton = document.getElementById("print-report");
     if (printButton) printButton.addEventListener("click", function () { window.print(); });
     var topButton = document.getElementById("back-top");

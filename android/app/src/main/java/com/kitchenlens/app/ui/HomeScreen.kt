@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.filled.ListAlt
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -39,7 +40,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -97,19 +97,9 @@ fun HomeScreen(
 ) {
     val kitchen by vm.kitchen.collectAsStateWithLifecycle()
     val draft by vm.draft.collectAsStateWithLifecycle()
-    var confirmNew by remember { mutableStateOf(false) }
+    val lastReset by vm.lastReset.collectAsStateWithLifecycle()
+    val message by vm.message.collectAsStateWithLifecycle()
     val k = kitchen
-    if (confirmNew) {
-        AlertDialog(
-            onDismissRequest = { confirmNew = false },
-            title = { Text("Start a new order?") },
-            text = { Text("The saved order in progress and its clip will be cleared.") },
-            confirmButton = {
-                TextButton(onClick = { vm.clearDraft(); confirmNew = false; onPack() }) { Text("Clear and start new") }
-            },
-            dismissButton = { TextButton(onClick = { confirmNew = false }) { Text("Keep it") } },
-        )
-    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -137,6 +127,30 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (vm.repo.isDemo) DemoBanner()
+            message?.let { m ->
+                Card(colors = CardDefaults.cardColors(containerColor = Chilli.copy(alpha = 0.12f))) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(m, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = { vm.dismissMessage() }) { Text("OK") }
+                    }
+                }
+            }
+            if (lastReset != null) {
+                Card(colors = CardDefaults.cardColors(containerColor = LeafLight)) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("New order started", fontWeight = FontWeight.Bold)
+                        Text(
+                            "The order form and today's hygiene records were cleared. Record the hygiene sections below, " +
+                                "then pack the order. Seals already printed are not affected.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Row {
+                            TextButton(onClick = { vm.undoNewOrder() }) { Text("Undo") }
+                            TextButton(onClick = { vm.dismissUndo() }) { Text("OK") }
+                        }
+                    }
+                }
+            }
             if (k.gstin.isBlank()) {
                 Text(
                     "Tip: add your GST number in Kitchen details (shop icon above) so customers see it on every seal.",
@@ -149,7 +163,7 @@ fun HomeScreen(
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Ready-to-pack score: $readiness / 100", color = Color.White, fontWeight = FontWeight.Bold)
                     Text(
-                        "Customers see this score on every order (temperature adds the last 20 points).",
+                        "Customers see this score on every order (temperature at 65°C or above, per FSSAI guideline, adds the last 20 points).",
                         color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodySmall,
                     )
                     val d = draft
@@ -170,14 +184,16 @@ fun HomeScreen(
                     ) {
                         Icon(Icons.Filled.QrCode2, null)
                         Spacer(Modifier.size(8.dp))
-                        Text(if (d != null) "Continue this order" else "New order + QR seal", fontWeight = FontWeight.Bold)
+                        Text(if (d != null) "Continue this order" else "Pack an order + QR seal", fontWeight = FontWeight.Bold)
                     }
-                    if (d != null) {
-                        OutlinedButton(
-                            onClick = { confirmNew = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                        ) { Text("New order (clear the saved one)") }
+                    OutlinedButton(
+                        onClick = { vm.startNewOrder() },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    ) {
+                        Icon(Icons.Filled.RestartAlt, null)
+                        Spacer(Modifier.size(8.dp))
+                        Text("New order: clear everything")
                     }
                 }
             }

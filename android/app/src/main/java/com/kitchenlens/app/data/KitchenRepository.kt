@@ -23,6 +23,11 @@ interface KitchenRepository {
     suspend fun createKitchen(name: String, locality: String, city: String, fssai: String, gstin: String, tier: String): String
     /** Changes name, locality, city, FSSAI, GSTIN or tier (keys as in [profileMap]). */
     suspend fun updateKitchenProfile(kitchenId: String, profile: Map<String, String>)
+    /**
+     * Replaces the kitchen's current hygiene records (empty map = clear them for a new order).
+     * Seals already created keep their own frozen copy, so they are not affected.
+     */
+    suspend fun replaceCurrentRecords(kitchenId: String, latest: Map<String, Map<String, Any?>>)
     fun observeKitchen(kitchenId: String): Flow<Kitchen?>
     suspend fun getKitchen(kitchenId: String): Kitchen
 
@@ -62,6 +67,7 @@ interface KitchenRepository {
         foodType: String,
         tempC: Double,
         clip: File,
+        clipRecordedAt: Long,
         onProgress: (Float) -> Unit,
     ): OrderSummary
 
@@ -184,7 +190,9 @@ fun buildOrderRecord(
     clipUrl: String,
     packedAt: Long,
     score: Int,
+    clipRecordedAt: Long = packedAt,
 ): Map<String, Any?> = mapOf(
+    "clipRecordedAt" to clipRecordedAt,
     "kitchenId" to kitchen.id,
     "kitchenName" to kitchen.name,
     "kitchenLocality" to kitchen.locality,

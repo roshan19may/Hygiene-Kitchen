@@ -110,7 +110,7 @@ private fun MainNav(vm: AppViewModel, kitchenId: String) {
             QrResultScreen(
                 vm, code,
                 onPreview = { nav.navigate("preview/$code") },
-                onPackNext = { nav.navigate("pack") { popUpTo("home") } },
+                onPackNext = { vm.startNewOrder(); nav.popBackStack("home", inclusive = false) },
                 onHome = { nav.popBackStack("home", inclusive = false) },
                 onSetupCloud = { nav.navigate("kitchen") },
             )

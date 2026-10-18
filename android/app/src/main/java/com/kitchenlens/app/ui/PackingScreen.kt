@@ -21,7 +21,6 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -84,13 +83,13 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
     var clip by remember { mutableStateOf(initial.clipPath?.let { File(it) }?.takeIf { it.exists() }) }
     var clipSeconds by remember { mutableIntStateOf(initial.clipSeconds) }
     var savedAt by remember { mutableLongStateOf(initial.savedAt) }
+    var clipRecordedAt by remember { mutableLongStateOf(initial.clipRecordedAt) }
 
     var recording by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
     var error by remember { mutableStateOf<String?>(null) }
     var existingCode by remember { mutableStateOf<String?>(null) }
-    var confirmNew by remember { mutableStateOf(false) }
 
     fun currentDraft() = OrderDraft(
         platform = platform.firstOrNull() ?: "",
@@ -100,6 +99,7 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
         tempText = tempText,
         clipPath = clip?.absolutePath,
         clipSeconds = clipSeconds,
+        clipRecordedAt = clipRecordedAt,
     )
 
     /** Saves progress on the phone. Returns false when there was nothing to save. */
@@ -112,10 +112,11 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
         return true
     }
 
-    fun resetAll() {
+    /** "Reset": clears this order form (and its saved draft) immediately. */
+    fun resetForm() {
         vm.clearDraft()
         platform = setOf(); orderRef = ""; foodType = setOf("Hot"); tempText = ""
-        clip = null; clipSeconds = 0; savedAt = 0L
+        clip = null; clipSeconds = 0; clipRecordedAt = 0L; savedAt = 0L
         packer = vm.lastPackerName
         error = null; existingCode = null
     }
@@ -135,6 +136,7 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
             hint = "Show the sealed containers going into the bag and the bag being closed. Keep spices and recipe cards out of frame.",
             onCaptured = { f, s ->
                 clip = f; clipSeconds = s; recording = false
+                clipRecordedAt = System.currentTimeMillis() - s * 1000L
                 saveDraft() // never lose a recorded clip
             },
             onCancel = { recording = false },
@@ -142,22 +144,13 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
         return
     }
 
-    if (confirmNew) {
-        AlertDialog(
-            onDismissRequest = { confirmNew = false },
-            title = { Text("Start a new order?") },
-            text = { Text("This clears the platform, order number, temperature and recorded clip of the current order. It cannot be undone.") },
-            confirmButton = { TextButton(onClick = { resetAll(); confirmNew = false }) { Text("Clear and start new") } },
-            dismissButton = { TextButton(onClick = { confirmNew = false }) { Text("Keep this order") } },
-        )
-    }
 
     val temp = tempText.replace(',', '.').toDoubleOrNull()
     val tempOk = temp != null && HygieneScore.temperatureOk(foodType.first(), temp)
     val needsOrderNo = platform.firstOrNull() != DIRECT
 
     Scaffold(
-        topBar = { BackBar("Pack an order") { leave() } },
+        topBar = { BackBar("Pack an order", onReset = { resetForm() }) { leave() } },
         containerColor = MaterialTheme.colorScheme.background,
     ) { pad ->
         Column(
@@ -176,14 +169,19 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Button(
-                        onClick = { confirmNew = true },
+                        onClick = { vm.startNewOrder(); onBack() },
                         enabled = !working,
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = Chilli, contentColor = Color.White),
                     ) {
                         Icon(Icons.Filled.RestartAlt, null); Spacer(Modifier.size(8.dp))
-                        Text("New order (reset all fields)", fontWeight = FontWeight.Bold)
+                        Text("New order: clear everything", fontWeight = FontWeight.Bold)
                     }
+                    Text(
+                        "Clears this order and today's hygiene records so you start from the beginning. " +
+                            "\"Reset\" (top right) clears only this form. Seals already printed are not affected.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
             }
 
@@ -206,7 +204,7 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
                         supportingText = {
                             Text(
                                 if (foodType.first() == "Cold") "Enter the reading shown. Guideline: cold food at 5°C or below."
-                                else "Enter the reading shown. Guideline: hot food at least 50°C."
+                                else "Enter the reading shown. FSSAI guideline: hot food at 65°C or above."
                             )
                         },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -219,8 +217,8 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
                             Text(
                                 when {
                                     tempOk -> "Meets the guideline"
-                                    foodType.first() == "Hot" -> "Below the 50°C guideline. You can still save it; customers see the reading you enter."
-                                    else -> "Above the 5°C guideline. You can still save it; customers see the reading you enter."
+                                    foodType.first() == "Hot" -> "Warning: below the 65°C FSSAI guideline. Reheat if you can. You can still continue; customers see the reading you enter."
+                                    else -> "Warning: above the 5°C guideline. Chill if you can. You can still continue; customers see the reading you enter."
                                 },
                                 color = if (tempOk) Ok else Chilli,
                             )
@@ -249,7 +247,7 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
             ErrorText(error)
             val dup = existingCode
             if (dup != null) {
-                OutlinedButton(onClick = { resetAll(); onCreated(dup) }, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { resetForm(); onCreated(dup) }, modifier = Modifier.fillMaxWidth()) {
                     Text("Open the existing seal for this order")
                 }
             }
@@ -291,7 +289,9 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
                                 val order = vm.repo.createOrder(
                                     kitchen = k, platform = platform.first(), orderRef = orderRef.trim(),
                                     packerName = packer, foodType = foodType.first(), tempC = temp,
-                                    clip = clip ?: c, onProgress = { progress = it },
+                                    clip = clip ?: c,
+                                    clipRecordedAt = clipRecordedAt.takeIf { it > 0 } ?: System.currentTimeMillis(),
+                                    onProgress = { progress = it },
                                 )
                                 vm.clearDraft()
                                 onCreated(order.code)

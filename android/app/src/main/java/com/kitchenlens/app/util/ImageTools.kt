@@ -3,10 +3,16 @@ package com.kitchenlens.app.util
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.Canvas
 import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.Typeface
 import androidx.exifinterface.media.ExifInterface
 import java.io.File
 import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 object ImageTools {
 
@@ -14,7 +20,7 @@ object ImageTools {
      * Shrinks a camera photo to at most [maxSide] px, fixes rotation, and writes a JPEG.
      * Returns the compressed file and its fingerprint (for duplicate detection).
      */
-    fun compress(input: File, outDir: File, maxSide: Int = 1600): Pair<File, String> {
+    fun compress(input: File, outDir: File, maxSide: Int = 1600, takenAt: Long = System.currentTimeMillis()): Pair<File, String> {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(input.absolutePath, bounds)
         var sample = 1
@@ -42,9 +48,35 @@ object ImageTools {
             bmp = Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true)
         }
 
+        val hash = dHash(bmp) // fingerprint the scene before the timestamp is added
+        val stamped = stamp(bmp, takenAt)
         val out = File(outDir, "photo_${System.currentTimeMillis()}.jpg")
-        FileOutputStream(out).use { bmp.compress(Bitmap.CompressFormat.JPEG, 80, it) }
-        return out to dHash(bmp)
+        FileOutputStream(out).use { stamped.compress(Bitmap.CompressFormat.JPEG, 80, it) }
+        return out to hash
+    }
+
+    /** e.g. "18 Oct 2026, 07:42:10 PM IST" in the phone's time zone. */
+    fun stampText(at: Long): String =
+        SimpleDateFormat("dd MMM yyyy, hh:mm:ss a z", Locale.ENGLISH).format(Date(at))
+
+    /**
+     * Burns the date and time into the bottom of the photo, so the time it was
+     * taken is visible wherever the photo is shown (app, customer page, downloads).
+     */
+    fun stamp(src: Bitmap, at: Long): Bitmap {
+        val bmp = if (src.isMutable) src else src.copy(Bitmap.Config.ARGB_8888, true)
+        val c = Canvas(bmp)
+        val text = "KitchenLens · " + stampText(at)
+        val size = (bmp.width * 0.034f).coerceIn(14f, 64f)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE; textSize = size; typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        }
+        val pad = size * 0.5f
+        val barH = size + pad * 2
+        val bar = Paint().apply { color = Color.argb(150, 0, 0, 0) }
+        c.drawRect(0f, bmp.height - barH, bmp.width.toFloat(), bmp.height.toFloat(), bar)
+        c.drawText(text, pad, bmp.height - pad - paint.descent(), paint)
+        return bmp
     }
 
     /**

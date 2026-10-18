@@ -56,6 +56,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontFamily
+import com.kitchenlens.app.util.ImageTools
+import kotlinx.coroutines.delay
 import androidx.concurrent.futures.await
 import java.io.File
 
@@ -128,6 +131,15 @@ private fun CameraBody(
     var seconds by remember { mutableIntStateOf(0) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    // Live date-time shown over the camera; photos get it burned in when saved,
+    // and clips are shown with a running timestamp wherever they play.
+    var clock by remember { mutableStateOf(ImageTools.stampText(System.currentTimeMillis())) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            clock = ImageTools.stampText(System.currentTimeMillis())
+            delay(1000)
+        }
+    }
 
     LaunchedEffect(mode) {
         val provider = cameraProvider(context)
@@ -191,6 +203,16 @@ private fun CameraBody(
         AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
 
         Column(Modifier.fillMaxWidth().systemBarsPadding().padding(16.dp)) {
+            Text(
+                clock,
+                color = Color.White,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .background(Color(0xAA000000), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            )
+            Spacer(Modifier.size(8.dp))
             Text(
                 hint,
                 color = Color.White,

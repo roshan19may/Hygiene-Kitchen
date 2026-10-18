@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">KitchenLens</string>
+    <string name="app_name">KitchenLens — Food Safety &amp; Hygiene Verification</string>
+    <!-- Short name under the home-screen icon, where the full name would be cut off -->
+    <string name="app_short_name">KitchenLens</string>
 </resources>

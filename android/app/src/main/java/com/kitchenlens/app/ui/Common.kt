@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -29,12 +31,24 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/**
+ * Screen title bar with Back. When [onReset] is given, a "Reset" button on the
+ * right clears what was entered on this screen immediately.
+ */
 @Composable
-fun BackBar(title: String, onBack: () -> Unit) {
+fun BackBar(title: String, onReset: (() -> Unit)? = null, onBack: () -> Unit) {
     TopAppBar(
         title = { Text(title) },
         navigationIcon = {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+        },
+        actions = {
+            if (onReset != null) {
+                TextButton(onClick = onReset) {
+                    Icon(Icons.Filled.RestartAlt, contentDescription = null)
+                    Text(" Reset")
+                }
+            }
         },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
     )

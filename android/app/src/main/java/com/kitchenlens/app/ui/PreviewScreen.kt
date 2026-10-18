@@ -40,6 +40,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import coil.compose.AsyncImage
+import androidx.compose.ui.text.font.FontFamily
+import com.kitchenlens.app.util.ImageTools
+import kotlinx.coroutines.delay
 import com.kitchenlens.app.AppViewModel
 import com.kitchenlens.app.data.INVENTORY_CATEGORIES
 import com.kitchenlens.app.data.Section
@@ -54,7 +57,7 @@ fun PreviewScreen(vm: AppViewModel, code: String, onBack: () -> Unit) {
         order = runCatching { vm.repo.getOrder(code) }.onFailure { error = it.message }.getOrNull()
         if (order == null && error == null) error = "Order not found"
     }
-    Scaffold(topBar = { BackBar("Customer view", onBack) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
+    Scaffold(topBar = { BackBar("Customer view", onBack = onBack) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
         val o = order
         if (o == null) {
             Column(Modifier.padding(pad).padding(16.dp)) { if (error != null) ErrorText(error) else CenteredLoading() }
@@ -89,7 +92,7 @@ private fun CustomerView(o: Map<String, Any?>, modifier: Modifier) {
             style = MaterialTheme.typography.bodyMedium,
         )
 
-        ClipPlayer(o["clipUrl"] as? String)
+        ClipPlayer(o["clipUrl"] as? String, (o["clipRecordedAt"] as? Number)?.toLong() ?: packedAt)
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Stat(Modifier.weight(1f), "%.0f°C".format(temp), "Temperature at packing", if (tempOk) Ok else Chilli)
@@ -162,7 +165,7 @@ private fun ProofRow(entry: Map<String, Any?>, packedAt: Long) {
             if (open) {
                 val url = entry["mediaUrl"] as? String
                 val urls = (entry["mediaUrls"] as? List<*>)?.filterIsInstance<String>().orEmpty().ifEmpty { listOfNotNull(url) }
-                if (isVideo) ClipPlayer(url)
+                if (isVideo) ClipPlayer(url, (entry["details"] as? Map<*, *>)?.get("recordedAt")?.toString()?.toLongOrNull() ?: at)
                 else urls.forEach { u ->
                     AsyncImage(
                         model = u, contentDescription = null, contentScale = ContentScale.Crop,
@@ -175,16 +178,41 @@ private fun ProofRow(entry: Map<String, Any?>, packedAt: Long) {
 }
 
 @Composable
-private fun ClipPlayer(url: String?) {
+private fun ClipPlayer(url: String?, startedAt: Long) {
     if (url == null) return
-    AndroidView(
-        factory = { ctx ->
-            VideoView(ctx).apply {
-                setMediaController(MediaController(ctx).also { it.setAnchorView(this) })
-                setVideoURI(Uri.parse(url))
-                setOnPreparedListener { mp -> mp.isLooping = true; mp.setVolume(0f, 0f); start() }
-            }
-        },
-        modifier = Modifier.fillMaxWidth().aspectRatio(9f / 16f).clip(RoundedCornerShape(12.dp)),
-    )
+    var view by remember { mutableStateOf<VideoView?>(null) }
+    var stamp by remember { mutableStateOf(ImageTools.stampText(startedAt)) }
+    // Running timestamp: recording start time + current playback position
+    LaunchedEffect(view, startedAt) {
+        while (true) {
+            val pos = runCatching { view?.currentPosition ?: 0 }.getOrDefault(0)
+            stamp = ImageTools.stampText(startedAt + pos)
+            delay(250)
+        }
+    }
+    Box(Modifier.fillMaxWidth().aspectRatio(9f / 16f).clip(RoundedCornerShape(12.dp))) {
+        AndroidView(
+            factory = { ctx ->
+                VideoView(ctx).apply {
+                    setMediaController(MediaController(ctx).also { it.setAnchorView(this) })
+                    setVideoURI(Uri.parse(url))
+                    setOnPreparedListener { mp -> mp.isLooping = true; mp.setVolume(0f, 0f); start() }
+                    view = this
+                }
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
+        Text(
+            stamp,
+            color = Color.White,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(8.dp)
+                .background(Color(0xAA000000), RoundedCornerShape(6.dp))
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+        )
+    }
 }

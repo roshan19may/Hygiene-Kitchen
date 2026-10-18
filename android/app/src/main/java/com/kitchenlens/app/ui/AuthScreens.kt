@@ -79,6 +79,7 @@ fun LoginScreen(vm: AppViewModel) {
     ) {
         Spacer(Modifier.size(32.dp))
         Text("KitchenLens", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = Leaf)
+        Text("Food Safety & Hygiene Verification", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text("Show customers how their food was prepared, without revealing your recipes.")
         if (vm.repo.isDemo) DemoBanner()
         OutlinedTextField(
@@ -93,6 +94,7 @@ fun LoginScreen(vm: AppViewModel) {
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
         )
         ErrorText(error)
+        TextButton(onClick = { email = ""; password = ""; error = null }, enabled = !busy) { Text("Reset") }
         Button(onClick = { go { vm.repo.signIn(email, password) } }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
             Text(if (busy) "Please wait…" else "Sign in")
         }
@@ -183,6 +185,10 @@ fun SetupKitchenScreen(vm: AppViewModel) {
                 }
             },
         ) { Text(if (busy) "Saving…" else "Save and continue") }
+        TextButton(onClick = {
+            form.name = ""; form.locality = ""; form.city = setOf(CITIES.first()); form.fssai = ""; form.gstin = ""
+            form.tier = setOf(TIERS.first()); error = null
+        }, enabled = !busy) { Text("Reset") }
         TextButton(onClick = { vm.signOut() }) { Text("Sign out") }
     }
 }
@@ -202,7 +208,13 @@ fun EditKitchenScreen(vm: AppViewModel, onDone: () -> Unit, onBack: () -> Unit) 
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    Scaffold(topBar = { BackBar("Kitchen details", onBack) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
+    Scaffold(topBar = {
+        BackBar("Kitchen details", onReset = {
+            // Puts back the saved details, discarding unsaved edits
+            form.name = k.name; form.locality = k.locality; form.city = setOf(k.city.ifBlank { CITIES.first() })
+            form.fssai = k.fssai; form.gstin = k.gstin; form.tier = setOf(k.tier.ifBlank { TIERS.first() }); error = null
+        }, onBack = onBack)
+    }, containerColor = MaterialTheme.colorScheme.background) { pad ->
         Column(
             Modifier.fillMaxSize().padding(pad).imePadding().padding(horizontal = 16.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),

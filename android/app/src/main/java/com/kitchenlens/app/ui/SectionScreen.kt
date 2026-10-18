@@ -34,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -122,6 +123,7 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
     var mainFile by remember { mutableStateOf<File?>(null) }
     var mainSeconds by remember { mutableIntStateOf(0) }
     var photoHash by remember { mutableStateOf<String?>(null) }
+    var capturedAt by remember { mutableLongStateOf(0L) }
 
     var capturing by remember { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
@@ -142,6 +144,7 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
                 capturing = false
                 if (!photoMode) {
                     mainFile = file; mainSeconds = secs
+                    capturedAt = System.currentTimeMillis() - secs * 1000L
                 } else {
                     working = true
                     scope.launch {
@@ -160,6 +163,14 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
             },
         )
         return
+    }
+
+    /** "Reset": clears everything entered on this screen immediately. */
+    fun resetScreen() {
+        media = setOf(); checklist = setOf(); shift = setOf(); staffCount = ""; vendor = ""
+        serviceDate = formatDate(System.currentTimeMillis()); nextDueDays = setOf("30")
+        mainFile = null; mainSeconds = 0; photoHash = null; capturedAt = 0L; error = null
+        staffName = vm.lastPackerName
     }
 
     fun submit() {
@@ -188,6 +199,7 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
         if (error != null || f == null) return
 
         val details = mutableMapOf<String, String>()
+        if (section.media == MediaType.VIDEO && capturedAt > 0) details["recordedAt"] = capturedAt.toString()
         val key = section.name
         val label: String
         when (section) {
@@ -236,7 +248,7 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
     }
 
     Scaffold(
-        topBar = { BackBar(section.title, onBack) },
+        topBar = { BackBar(section.title, onReset = { resetScreen() }, onBack = onBack) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { pad ->
         Column(

@@ -163,6 +163,12 @@ fun InventoryScreen(vm: AppViewModel, onDone: () -> Unit, onBack: () -> Unit) {
         return
     }
 
+    /** "Reset": clears categories, photos, bills and supplier immediately. */
+    fun resetScreen() {
+        cats = setOf(); photos.clear(); bills.clear(); supplier = setOf(); error = null
+        staffName = vm.lastPackerName
+    }
+
     fun submit() {
         error = null
         val missingPhotos = selected.firstOrNull { photos[it].isNullOrEmpty() }
@@ -203,7 +209,7 @@ fun InventoryScreen(vm: AppViewModel, onDone: () -> Unit, onBack: () -> Unit) {
     }
 
     Scaffold(
-        topBar = { BackBar("Food inventory arrival", onBack) },
+        topBar = { BackBar("Food inventory arrival", onReset = { resetScreen() }, onBack = onBack) },
         containerColor = MaterialTheme.colorScheme.background,
     ) { pad ->
         Column(

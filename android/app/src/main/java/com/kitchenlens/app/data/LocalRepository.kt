@@ -86,6 +86,14 @@ class LocalRepository(context: Context) : KitchenRepository {
         kitchenFlow.value = kitchenFromMap(kitchenId, k)
     }
 
+    override suspend fun replaceCurrentRecords(kitchenId: String, latest: Map<String, Map<String, Any?>>) {
+        val k = kitchenMap()
+        k["latest"] = latest
+        state.put("kitchen", toJson(k))
+        save()
+        kitchenFlow.value = kitchenFromMap(kitchenId, k)
+    }
+
     override fun observeKitchen(kitchenId: String): Flow<Kitchen?> {
         kitchenFlow.value = kitchenFromMap(kitchenId, kitchenMap())
         return kitchenFlow
@@ -158,7 +166,7 @@ class LocalRepository(context: Context) : KitchenRepository {
 
     override suspend fun createOrder(
         kitchen: Kitchen, platform: String, orderRef: String, packerName: String,
-        foodType: String, tempC: Double, clip: File, onProgress: (Float) -> Unit,
+        foodType: String, tempC: Double, clip: File, clipRecordedAt: Long, onProgress: (Float) -> Unit,
     ): OrderSummary = withContext(Dispatchers.IO) {
         findOrderCode(platform, orderRef)?.let { throw DuplicateOrderException(it, platform, orderRef) }
         val code = QrLabel.newCode()
@@ -180,7 +188,7 @@ class LocalRepository(context: Context) : KitchenRepository {
             cloudExtras = mapOf("cloudName" to cloud.cloudName, "clipCloudId" to clipId)
         }
         onProgress(1f)
-        val record = buildOrderRecord(fresh, platform, orderRef, packerName, foodType, tempC, tempOk, clipUrl, now, score) + cloudExtras
+        val record = buildOrderRecord(fresh, platform, orderRef, packerName, foodType, tempC, tempOk, clipUrl, now, score, clipRecordedAt) + cloudExtras
         val orders = state.optJSONObject("orders") ?: JSONObject()
         orders.put(code, toJson(record))
         state.put("orders", orders)

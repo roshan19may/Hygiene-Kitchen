@@ -61,6 +61,10 @@ class FirebaseRepository : KitchenRepository {
         db.collection("kitchens").document(kitchenId).update(HashMap<String, Any>(profile)).await()
     }
 
+    override suspend fun replaceCurrentRecords(kitchenId: String, latest: Map<String, Map<String, Any?>>) {
+        db.collection("kitchens").document(kitchenId).update("latest", latest).await()
+    }
+
     private fun parse(snap: DocumentSnapshot): Kitchen = kitchenFromMap(snap.id, snap.data ?: emptyMap())
 
     override fun observeKitchen(kitchenId: String): Flow<Kitchen?> = callbackFlow {
@@ -156,7 +160,7 @@ class FirebaseRepository : KitchenRepository {
 
     override suspend fun createOrder(
         kitchen: Kitchen, platform: String, orderRef: String, packerName: String,
-        foodType: String, tempC: Double, clip: File, onProgress: (Float) -> Unit,
+        foodType: String, tempC: Double, clip: File, clipRecordedAt: Long, onProgress: (Float) -> Unit,
     ): OrderSummary {
         val refKey = orderRefKey(platform, orderRef)
         findOrderCode(platform, orderRef)?.let { throw DuplicateOrderException(it, platform, orderRef) }
@@ -168,7 +172,7 @@ class FirebaseRepository : KitchenRepository {
         val now = System.currentTimeMillis()
         val tempOk = HygieneScore.temperatureOk(foodType, tempC)
         val score = HygieneScore.compute(fresh.latest, tempOk, now)
-        val record = buildOrderRecord(fresh, platform, orderRef, packerName, foodType, tempC, tempOk, clipUrl, now, score)
+        val record = buildOrderRecord(fresh, platform, orderRef, packerName, foodType, tempC, tempOk, clipUrl, now, score, clipRecordedAt)
 
         db.batch()
             .set(db.collection("orders").document(code), record + ("createdAt" to FieldValue.serverTimestamp()))

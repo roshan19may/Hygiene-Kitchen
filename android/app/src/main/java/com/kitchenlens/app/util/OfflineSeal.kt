@@ -82,6 +82,9 @@ object OfflineSeal {
         // Cloud storage (optional): account name + packing clip ID; photo/clip IDs go in each row
         field("cl", o["cloudName"])
         field("c", o["clipCloudId"])
+        // Seconds between the packing clip starting and the seal (for the clip's timestamp)
+        val clipAt = (o["clipRecordedAt"] as? Number)?.toLong()
+        if (clipAt != null && clipAt in 1 until packedAt) field("cr", (packedAt - clipAt) / 1000)
         sb.append(",\"r\":[")
         rows.forEachIndexed { i, r ->
             if (i > 0) sb.append(',')

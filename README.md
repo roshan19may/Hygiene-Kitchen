@@ -1,4 +1,4 @@
-# KitchenLens
+# KitchenLens — Food Safety & Hygiene Verification
 
 Hygiene transparency for cloud kitchens. Kitchen staff record hygiene proof in the
 Android app, and every delivery bag gets a QR seal. When the customer scans it, they
@@ -192,3 +192,15 @@ The public scan page (`web/index.html`) uses a customer-facing report layout wit
 - explicit distinction between a kitchen-recorded temperature guideline and independent food-safety validation.
 
 Before production use, review the temperature acceptance criteria against the kitchen's documented food-safety plan and applicable FSSAI requirements. The page intentionally does not describe a kitchen-entered score as independent certification.
+
+## Latest changes
+
+- **Timestamps:** every photo has the date and time burned into it when taken; the camera shows a
+  live clock; every clip plays with a running date-time overlay (recording start + playback time)
+  in the app and on the customer page.
+- **Reset** (top right) on every input screen clears what was entered on that screen immediately.
+- **New order: clear everything** (Home, order screen and after a seal is created) immediately clears
+  the order form and the current hygiene records so the next order starts from the beginning.
+  Seals already created keep their own records. An **Undo** banner appears on Home.
+- **Temperature:** the note shows the FSSAI guideline of 65°C or above for hot food (5°C or below for
+  cold). A lower reading shows a warning but never blocks the order.

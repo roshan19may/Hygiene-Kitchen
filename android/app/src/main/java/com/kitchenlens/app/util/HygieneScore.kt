@@ -47,14 +47,14 @@ object HygieneScore {
         }
     }
 
-    /** Guideline shown to staff: hot food at least this warm when packed. */
-    const val HOT_MIN_C = 50.0
+    /** FSSAI guideline shown to staff: hot food at 65°C or above when packed. */
+    const val HOT_MIN_C = 65.0
     /** Guideline shown to staff: cold food at most this cold when packed. */
     const val COLD_MAX_C = 5.0
 
     /**
-     * True when the reading meets the guideline. Any reading can still be saved;
-     * customers simply see whether it met the guideline.
+     * True when the reading meets the guideline. A lower reading only shows a
+     * warning: staff can still continue, and customers see the reading entered.
      */
     fun temperatureOk(foodType: String, tempC: Double): Boolean =
         if (foodType == "Cold") tempC <= COLD_MAX_C else tempC >= HOT_MIN_C

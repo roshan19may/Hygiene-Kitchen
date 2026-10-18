@@ -53,11 +53,55 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return saved
     }
 
-    /** "New order": throws away the saved draft and its clip. */
+    /** Throws away the saved draft and its clip (used after a seal is created). */
     fun clearDraft() {
         draftStore.clear()
         _draft.value = null
     }
+
+    /** What "New order" cleared, kept so the user can undo it. */
+    data class NewOrderUndo(val kitchenId: String, val draft: OrderDraft?, val latest: Map<String, Map<String, Any?>>)
+
+    private val _lastReset = MutableStateFlow<NewOrderUndo?>(null)
+    val lastReset: StateFlow<NewOrderUndo?> = _lastReset.asStateFlow()
+
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
+    fun dismissMessage() { _message.value = null }
+
+    /**
+     * "New order": immediately clears the order form AND the current hygiene records
+     * (inventory, utensils, staff, pest control) so the next order starts from the
+     * beginning. Seals already created keep their own records. Can be undone.
+     */
+    fun startNewOrder() {
+        val k = _kitchen.value ?: return
+        _lastReset.value = NewOrderUndo(k.id, _draft.value, k.latest)
+        draftStore.clearKeepingClip()
+        _draft.value = null
+        viewModelScope.launch {
+            try {
+                repo.replaceCurrentRecords(k.id, emptyMap())
+            } catch (e: Exception) {
+                _message.value = "Could not clear the hygiene records: ${e.message}"
+            }
+        }
+    }
+
+    fun undoNewOrder() {
+        val u = _lastReset.value ?: return
+        _lastReset.value = null
+        u.draft?.let { saveDraft(it) }
+        viewModelScope.launch {
+            try {
+                repo.replaceCurrentRecords(u.kitchenId, u.latest)
+            } catch (e: Exception) {
+                _message.value = "Could not restore the hygiene records: ${e.message}"
+            }
+        }
+    }
+
+    fun dismissUndo() { _lastReset.value = null }
 
     private var kitchenJob: Job? = null
 

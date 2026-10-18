@@ -86,7 +86,7 @@ fun QrResultScreen(
         "${it["platform"] ?: ""} order #$ref"
     }
 
-    Scaffold(topBar = { BackBar("QR seal ready", onHome) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
+    Scaffold(topBar = { BackBar("QR seal ready", onBack = onHome) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
         Column(
             Modifier.fillMaxSize().padding(pad).padding(16.dp).verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -138,7 +138,7 @@ fun QrResultScreen(
             OutlinedButton(onClick = onPreview, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Filled.Visibility, null); Spacer(Modifier.size(8.dp)); Text("Preview what the customer sees")
             }
-            Button(onClick = onPackNext, modifier = Modifier.fillMaxWidth()) { Text("New order") }
+            Button(onClick = onPackNext, modifier = Modifier.fillMaxWidth()) { Text("New order: clear everything") }
             TextButton(onClick = onHome) { Text("Back to home") }
             Text(
                 "Stick the seal across the bag opening so it tears if the bag is opened.",
@@ -156,7 +156,7 @@ fun OrdersScreen(vm: AppViewModel, kitchenId: String, onOpen: (String) -> Unit, 
         orders = runCatching { vm.repo.recentOrders(kitchenId) }.onFailure { error = it.message }.getOrDefault(emptyList())
     }
     var query by remember { mutableStateOf("") }
-    Scaffold(topBar = { BackBar("Recent orders", onBack) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
+    Scaffold(topBar = { BackBar("Recent orders", onReset = { query = "" }, onBack = onBack) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
         val q = query.filter { it.isLetterOrDigit() }.uppercase()
         val list = orders?.filter { o ->
             q.isEmpty() || o.orderRef.uppercase().filter { it.isLetterOrDigit() }.contains(q) || o.code.contains(q)

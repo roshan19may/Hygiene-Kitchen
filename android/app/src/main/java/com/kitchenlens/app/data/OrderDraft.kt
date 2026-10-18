@@ -16,6 +16,8 @@ data class OrderDraft(
     val tempText: String = "",
     val clipPath: String? = null,
     val clipSeconds: Int = 0,
+    /** When the packing clip started recording (shown as its timestamp). */
+    val clipRecordedAt: Long = 0L,
     val savedAt: Long = 0L,
 ) {
     val isEmpty: Boolean
@@ -38,6 +40,7 @@ class DraftStore(context: Context) {
             tempText = j.optString("tempText"),
             clipPath = j.optString("clipPath").ifBlank { null }?.takeIf { File(it).exists() },
             clipSeconds = j.optInt("clipSeconds"),
+            clipRecordedAt = j.optLong("clipRecordedAt"),
             savedAt = j.optLong("savedAt"),
         )
     }.getOrNull()
@@ -65,6 +68,7 @@ class DraftStore(context: Context) {
                 .put("tempText", saved.tempText)
                 .put("clipPath", saved.clipPath ?: "")
                 .put("clipSeconds", saved.clipSeconds)
+                .put("clipRecordedAt", saved.clipRecordedAt)
                 .put("savedAt", saved.savedAt)
                 .toString()
         )
@@ -73,5 +77,10 @@ class DraftStore(context: Context) {
 
     fun clear() {
         dir.listFiles()?.forEach { it.delete() }
+    }
+
+    /** Forgets the draft but keeps its clip on disk, so "Undo" can bring it back. */
+    fun clearKeepingClip() {
+        file.delete()
     }
 }
