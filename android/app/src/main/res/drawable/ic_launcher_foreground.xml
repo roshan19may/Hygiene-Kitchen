@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A simple lens/eye over a bowl. Replace with your brand icon later. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- bowl -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,58 L78,58 C78,72 67,80 54,80 C41,80 30,72 30,58 Z" />
+    <!-- lens ring -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#F2C14E"
+        android:strokeWidth="5"
+        android:pathData="M54,30 m-12,0 a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0" />
+    <!-- tick inside lens -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M48,30 L52.5,34.5 L60,26" />
+</vector>

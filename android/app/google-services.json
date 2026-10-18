@@ -1,0 +1,30 @@
+{
+  "_comment": "PLACEHOLDER. With this file the app runs in DEMO MODE (data stays on the phone). Replace it with the google-services.json downloaded from your Firebase project, or add it as the GOOGLE_SERVICES_JSON secret on GitHub. See README.",
+  "project_info": {
+    "project_number": "000000000000",
+    "project_id": "kitchenlens-demo",
+    "storage_bucket": "kitchenlens-demo.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+        "android_client_info": {
+          "package_name": "com.kitchenlens.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDEMO-PLACEHOLDER-KEY-0000000000000"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

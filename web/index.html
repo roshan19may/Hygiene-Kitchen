@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--KL:HEAD-START-->
+<title>KitchenLens Seal</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: one phone-width column. The tamper seal opens the page, then the
+   packing clip, then a timeline of hygiene proof counted back from packing. */
+:root {
+  --bg: #F2F5F3;          /* sage-tinted paper */
+  --surface: #FFFFFF;
+  --ink: #13221D;
+  --muted: #5B6B65;
+  --line: #D9E1DD;
+  --leaf: #0F5C4A;        /* brand */
+  --leaf-soft: #DDEFE8;
+  --turmeric: #E2A930;    /* seal accent */
+  --ok: #1E8E5A;
+  --warn: #C9771F;
+  --bad: #C0392B;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1714; --surface: #15211D; --ink: #E7EFEB; --muted: #9DB0A8; --line: #2A3A34;
+    --leaf: #5CC7A4; --leaf-soft: #17332A; --turmeric: #F0BE55;
+    --ok: #4CC38A; --warn: #E9A04F; --bad: #F07A6C; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1714; --surface: #15211D; --ink: #E7EFEB; --muted: #9DB0A8; --line: #2A3A34;
+  --leaf: #5CC7A4; --leaf-soft: #17332A; --turmeric: #F0BE55;
+  --ok: #4CC38A; --warn: #E9A04F; --bad: #F07A6C; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.5 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+main { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+h1, h2 { font-family: var(--font-display); text-wrap: balance; margin: 0; }
+h1 { font-size: 1.7rem; line-height: 1.15; font-weight: 800; }
+h2 { font-size: 1.15rem; font-weight: 600; }
+.eyebrow { font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.muted { color: var(--muted); }
+.small { font-size: .875rem; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+a { color: var(--leaf); font-weight: 700; }
+
+/* Seal */
+.seal { display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: center; }
+.stamp {
+  width: 104px; height: 104px; border-radius: 50%;
+  border: 3px dashed var(--turmeric); display: grid; place-items: center; text-align: center;
+  background: var(--surface);
+}
+.stamp b { display: block; font-family: var(--font-display); font-size: .8rem; letter-spacing: .06em; color: var(--leaf); }
+.stamp span { font-family: var(--font-mono); font-size: .8rem; }
+.kitchen { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+
+/* Clip */
+.clip { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.clip video, .clip .placeholder { display: block; width: 100%; max-width: 100%; aspect-ratio: 9 / 12; background: #000; object-fit: cover; }
+.clip .placeholder {
+  display: grid; place-items: center; color: #fff; text-align: center; padding: 16px;
+  background: repeating-linear-gradient(135deg, #0F5C4A 0 18px, #0d5243 18px 36px);
+  font-family: var(--font-display); font-size: 1.1rem;
+}
+.clip figcaption { padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; }
+
+/* Stats */
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+.stat .v { font-family: var(--font-mono); font-size: 1.6rem; font-weight: 700; }
+.stat .l { font-size: .85rem; color: var(--muted); }
+.ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+
+/* Timeline */
+.timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.timeline li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; }
+.rail { position: relative; }
+.rail::before { content: ""; position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: var(--line); }
+.timeline li:last-child .rail::before { bottom: 50%; }
+.dot { position: absolute; left: 4px; top: 18px; width: 14px; height: 14px; border-radius: 50%; background: var(--leaf); border: 3px solid var(--bg); }
+.dot.packed { background: var(--turmeric); }
+.entry { padding-block: 10px; min-width: 0; }
+.entry button {
+  all: unset; cursor: pointer; display: flex; justify-content: space-between; gap: 12px; width: 100%;
+  border-radius: 8px;
+}
+.entry button:focus-visible { outline: 2px solid var(--leaf); outline-offset: 4px; }
+.entry .title { font-weight: 700; }
+.entry .when { font-family: var(--font-mono); font-size: .8rem; color: var(--muted); }
+.entry .act { color: var(--leaf); font-weight: 700; white-space: nowrap; }
+.entry .det { font-size: .875rem; color: var(--muted); }
+.media { margin-top: 8px; }
+.media img, .media video { width: 100%; max-width: 100%; border-radius: 10px; display: block; }
+.media .placeholder {
+  border-radius: 10px; aspect-ratio: 4 / 3; max-width: 100%; display: grid; place-items: center;
+  background: var(--leaf-soft); color: var(--leaf); font-weight: 700; text-align: center; padding: 12px;
+}
+
+.note { border-top: 1px solid var(--line); padding-top: 14px; font-size: .85rem; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
+.demo { background: var(--leaf-soft); color: var(--ink); border-radius: 10px; padding: 10px 12px; font-size: .875rem; }
+.err { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+@media (prefers-reduced-motion: no-preference) {
+  .stamp { animation: press .5s ease-out both; }
+  @keyframes press { from { transform: scale(1.12) rotate(-8deg); } to { transform: none; } }
+}
+</style>
+<!--KL:HEAD-END-->
+<script src="config.js"></script>
+</head>
+<body>
+<!--KL:BODY-START-->
+<main id="app" aria-live="polite">
+  <p class="muted">Loading your order…</p>
+</main>
+<script>
+(function () {
+  "use strict";
+  var CFG = window.KL_CONFIG || {};
+  var HOUR = 3600000;
+  var CATS = ["Vegetables", "Meat & Fish", "Dairy", "Spices", "Cooking oil", "Grains & Pulses"];
+
+  function invKey(cat) { return "INV_" + cat.toUpperCase().replace(/[^A-Z]/g, "_"); }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function safeUrl(u) { return /^https:\/\//.test(u || "") ? u : ""; }
+
+  /* Order code from /o/CODE, ?c=CODE or #CODE */
+  function readCode() {
+    var q = new URLSearchParams(location.search).get("c");
+    if (q) return q.toUpperCase();
+    var m = location.pathname.match(/\/o\/([A-Za-z0-9]{4,16})\/?$/);
+    if (m) return m[1].toUpperCase();
+    var h = location.hash.replace("#", "");
+    return h ? h.toUpperCase() : "DEMO";
+  }
+
+  /* Firestore REST values -> plain JS */
+  function decode(v) {
+    if (!v) return null;
+    if ("stringValue" in v) return v.stringValue;
+    if ("integerValue" in v) return Number(v.integerValue);
+    if ("doubleValue" in v) return Number(v.doubleValue);
+    if ("booleanValue" in v) return v.booleanValue;
+    if ("nullValue" in v) return null;
+    if ("timestampValue" in v) return Date.parse(v.timestampValue);
+    if ("mapValue" in v) return decodeFields(v.mapValue.fields || {});
+    if ("arrayValue" in v) return (v.arrayValue.values || []).map(decode);
+    return null;
+  }
+  function decodeFields(f) { var o = {}; Object.keys(f).forEach(function (k) { o[k] = decode(f[k]); }); return o; }
+
+  function fetchOrder(code) {
+    var url = "https://firestore.googleapis.com/v1/projects/" + encodeURIComponent(CFG.projectId) +
+      "/databases/(default)/documents/orders/" + encodeURIComponent(code) + "?key=" + encodeURIComponent(CFG.apiKey);
+    return fetch(url).then(function (r) {
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error("Server responded " + r.status);
+      return r.json().then(function (d) { return decodeFields(d.fields || {}); });
+    });
+  }
+
+  function demoOrder() {
+    var now = Date.now();
+    var p = now - 9 * 60000;
+    function e(label, hoursBefore, type, details) {
+      return { at: p - hoursBefore * HOUR, label: label, mediaType: type, mediaUrl: "", details: details };
+    }
+    var snap = {};
+    snap[invKey("Vegetables")] = e("Vegetables received", 7.2, "photo", { category: "Vegetables", billDate: "today", supplierType: "Local market" });
+    snap[invKey("Meat & Fish")] = e("Meat & Fish received", 5.5, "photo", { category: "Meat & Fish", billDate: "today", supplierType: "Wholesaler" });
+    snap[invKey("Spices")] = e("Spices received", 24 * 9, "photo", { category: "Spices", supplierType: "Wholesaler" });
+    snap.UTENSILS = e("Utensils cleaned", 2.1, "video", { cleaningMedium: "Detergent, Hot water, Food-grade sanitiser", shift: "Afternoon" });
+    snap.STAFF = e("Staff hygiene check", 2.6, "video", { checklist: "Hand-wash with soap, Cap / hairnet, Gloves, Clean apron", missing: "Mask, Nails trimmed", shift: "Afternoon" });
+    snap.PEST = e("Pest control service", 24 * 14, "photo", { vendor: "SafeHome Pest Services", nextDueDate: "in 16 days" });
+    return {
+      demo: true, kitchenName: "Biryani Box", kitchenLocality: "HSR Layout", kitchenCity: "Bengaluru",
+      fssai: "11223344556677", platform: "Swiggy", orderRefLast4: "4471", packerName: "Asha",
+      foodType: "Hot", tempC: 71, tempOk: true, score: 90, packedAtMillis: p, clipUrl: "", snapshot: snap
+    };
+  }
+
+  function beforePacking(at, packed) {
+    var min = Math.round((packed - at) / 60000);
+    if (min < 1) return "at packing";
+    if (min < 60) return min + " min before packing";
+    if (min < 48 * 60) return Math.round(min / 60) + " h before packing";
+    return Math.round(min / 1440) + " days before packing";
+  }
+  function fmt(t) {
+    return new Date(t).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  }
+  function detailLine(d) {
+    d = d || {};
+    return [
+      d.billDate && ("bill dated " + d.billDate), d.supplierType, d.cleaningMedium, d.checklist,
+      d.missing && ("not shown: " + d.missing), d.vendor && ("by " + d.vendor), d.nextDueDate && ("next due " + d.nextDueDate)
+    ].filter(Boolean).join(" · ");
+  }
+  function tone(score) { return score >= 80 ? "ok" : score >= 50 ? "warn" : "bad"; }
+
+  function mediaHtml(entry, demo) {
+    var url = safeUrl(entry.mediaUrl);
+    if (!url) return '<div class="placeholder">' + (demo ? "Sample: the kitchen's " + (entry.mediaType === "video" ? "clip" : "photo") + " appears here" : "Media unavailable") + "</div>";
+    return entry.mediaType === "video"
+      ? '<video src="' + esc(url) + '" controls muted playsinline preload="metadata"></video>'
+      : '<img src="' + esc(url) + '" alt="' + esc(entry.label) + '" loading="lazy">';
+  }
+
+  function render(o, code) {
+    var app = document.getElementById("app");
+    var snap = o.snapshot || {};
+    var packed = o.packedAtMillis || 0;
+    var rows = [];
+    CATS.forEach(function (c) { if (snap[invKey(c)]) rows.push(snap[invKey(c)]); });
+    ["UTENSILS", "STAFF", "PEST"].forEach(function (k) { if (snap[k]) rows.push(snap[k]); });
+    rows.sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
+
+    var clipUrl = safeUrl(o.clipUrl);
+    var clip = clipUrl
+      ? '<video src="' + esc(clipUrl) + '" controls muted playsinline autoplay loop preload="auto"></video>'
+      : '<div class="placeholder">' + (o.demo ? "Sample order: the 18-second packing clip plays here" : "Clip not available") + "</div>";
+
+    var tempTone = o.tempOk ? "ok" : "bad";
+    var tempNote = o.tempOk ? (o.foodType === "Cold" ? "Kept cold (5°C or below)" : "Hot and safe (60°C or above)")
+      : (o.foodType === "Cold" ? "Warmer than 5°C at packing" : "Below 60°C at packing");
+
+    var timeline = rows.map(function (r, i) {
+      return '<li><div class="rail"><span class="dot"></span></div><div class="entry">' +
+        '<button type="button" aria-expanded="false" data-i="' + i + '">' +
+        '<span><span class="title">' + esc(r.label) + '</span><br><span class="when">' + esc(beforePacking(r.at, packed)) + "</span></span>" +
+        '<span class="act">' + (r.mediaType === "video" ? "Watch" : "View") + "</span></button>" +
+        (detailLine(r.details) ? '<div class="det">' + esc(detailLine(r.details)) + "</div>" : "") +
+        '<div class="media" hidden data-m="' + i + '"></div></div></li>';
+    }).join("") +
+      '<li><div class="rail"><span class="dot packed"></span></div><div class="entry">' +
+      '<span class="title">Your order packed and sealed</span><br><span class="when">' + esc(fmt(packed)) + " · by " + esc(o.packerName) + "</span></div></li>";
+
+    app.innerHTML =
+      (o.demo ? '<div class="demo">This is a sample page. A real seal shows the kitchen\'s own clip and records for your order.</div>' : "") +
+      '<section class="seal">' +
+        '<div class="stamp" aria-hidden="true"><div><b>SEALED</b><span>' + esc(code.slice(0, 4)) + "<br>" + esc(code.slice(4)) + "</span></div></div>" +
+        '<div class="kitchen"><span class="eyebrow">How your food was packed</span>' +
+        "<h1>" + esc(o.kitchenName) + "</h1>" +
+        '<span class="muted small">' + esc(o.kitchenLocality) + ", " + esc(o.kitchenCity) + ' · FSSAI <span class="mono">' + esc(o.fssai) + "</span></span></div>" +
+      "</section>" +
+      '<figure class="clip" style="margin:0">' + clip +
+        '<figcaption><span><b>Packing clip</b> · no sound</span><span class="muted small">' +
+        esc(o.platform) + ' order ··<span class="mono">' + esc(o.orderRefLast4) + "</span></span></figcaption></figure>" +
+      '<section class="stats">' +
+        '<div class="stat"><div class="v ' + tempTone + '">' + esc(Math.round(o.tempC)) + '°C</div><div class="l">' + esc(tempNote) + "</div></div>" +
+        '<div class="stat"><div class="v ' + tone(o.score) + '">' + esc(o.score) + '<span class="small muted">/100</span></div><div class="l">Kitchen hygiene score at packing</div></div>' +
+      "</section>" +
+      '<section style="display:flex;flex-direction:column;gap:8px"><h2>Before your order was packed</h2>' +
+        (rows.length ? "" : '<p class="muted">The kitchen logged no hygiene records before this order.</p>') +
+        '<ol class="timeline">' + timeline + "</ol></section>" +
+      '<section class="note"><span>Check that the seal on your bag is not torn. If the seal code above does not match the sticker, report it.</span>' +
+        "<span>This page shows the kitchen's own recorded process. It is not a food-safety certification.</span>" +
+        (CFG.supportEmail ? '<span>Report a problem: <a href="mailto:' + esc(CFG.supportEmail) + "?subject=Seal%20" + esc(code) + '">' + esc(CFG.supportEmail) + "</a> (quote code " + esc(code) + ")</span>" : "") +
+      "</section>";
+
+    app.querySelectorAll("button[data-i]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var i = b.getAttribute("data-i");
+        var box = app.querySelector('[data-m="' + i + '"]');
+        var open = box.hidden;
+        if (open && !box.innerHTML) box.innerHTML = mediaHtml(rows[i], o.demo);
+        box.hidden = !open;
+        b.setAttribute("aria-expanded", String(open));
+        b.querySelector(".act").textContent = open ? "Hide" : (rows[i].mediaType === "video" ? "Watch" : "View");
+      });
+    });
+    document.title = o.kitchenName ? o.kitchenName + " · Seal " + code : "KitchenLens Seal";
+  }
+
+  function showError(msg) {
+    document.getElementById("app").innerHTML = '<div class="err"><h2>Seal not found</h2><p class="muted">' + esc(msg) + "</p></div>";
+  }
+
+  var code = readCode();
+  var configured = CFG.projectId && CFG.apiKey && CFG.projectId !== "kitchenlens-demo";
+  if (code === "DEMO" || !configured) {
+    render(demoOrder(), code === "DEMO" ? "DEMO2026" : code);
+    return;
+  }
+  fetchOrder(code).then(function (o) {
+    if (!o) showError("No order matches code " + code + ". Check the code printed on the seal, or contact the restaurant.");
+    else render(o, code);
+  }).catch(function () {
+    showError("We could not load this order right now. Check your internet connection and scan again.");
+  });
+})();
+</script>
+<!--KL:BODY-END-->
+</body>
+</html>

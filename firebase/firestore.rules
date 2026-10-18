@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function myKitchen() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.kitchenId;
+    }
+
+    // Links a login to its kitchen. Created once, in the same batch as the kitchen.
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid
+        && getAfter(/databases/$(database)/documents/kitchens/$(request.resource.data.kitchenId)).data.ownerUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /kitchens/{kid} {
+      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow read: if signedIn() && myKitchen() == kid;
+      allow update: if signedIn() && myKitchen() == kid
+        && request.resource.data.ownerUid == resource.data.ownerUid;
+
+      // Hygiene records can be added but never edited or deleted (tamper-proof history).
+      match /logs/{logId} {
+        allow read, create: if signedIn() && myKitchen() == kid;
+        allow update, delete: if false;
+      }
+    }
+
+    // Public order records: anyone with the exact code can open one (the QR scan),
+    // but nobody can list or browse all orders.
+    match /orders/{code} {
+      allow get: if true;
+      allow list: if signedIn() && resource.data.kitchenId == myKitchen();
+      allow create: if signedIn() && request.resource.data.kitchenId == myKitchen();
+      allow update, delete: if false;
+    }
+  }
+}

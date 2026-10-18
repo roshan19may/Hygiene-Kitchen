@@ -1,0 +1,18 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Photos and clips. Customers view them through the private download link
+    // saved in each order, so the folder itself is not public or listable.
+    match /kitchens/{kid}/{allPaths=**} {
+      function isMember() {
+        return request.auth != null
+          && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.kitchenId == kid;
+      }
+      allow read: if isMember();
+      allow create: if isMember()
+        && request.resource.size < 15 * 1024 * 1024
+        && request.resource.contentType.matches('image/jpeg|video/mp4');
+      allow update, delete: if false;
+    }
+  }
+}
