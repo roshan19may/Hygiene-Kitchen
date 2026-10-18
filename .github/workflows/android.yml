@@ -1,0 +1,72 @@
+name: Build Android app
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find the Android project
+        run: |
+          found=$(find . -name gradlew -not -path "*/node_modules/*" | head -1)
+          if [ -z "$found" ]; then
+            echo "Could not find gradlew. Check that the android folder was uploaded."
+            exit 1
+          fi
+          echo "APP_DIR=$(dirname "$found")" >> "$GITHUB_ENV"
+          echo "Android project found in $(dirname "$found")"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Use Firebase config from secret (if set)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            echo "$GOOGLE_SERVICES_JSON" > "$APP_DIR/app/google-services.json"
+            echo "Using Firebase config from secret"
+          else
+            echo "No GOOGLE_SERVICES_JSON secret: building demo mode"
+          fi
+
+      - name: Work out QR scan address
+        id: scan
+        env:
+          SCAN_BASE_URL: ${{ vars.SCAN_BASE_URL }}
+        run: |
+          if [ -n "$SCAN_BASE_URL" ]; then
+            echo "url=$SCAN_BASE_URL" >> "$GITHUB_OUTPUT"
+          else
+            owner="${GITHUB_REPOSITORY_OWNER,,}"
+            repo="${GITHUB_REPOSITORY#*/}"
+            echo "url=https://${owner}.github.io/${repo}/?c=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run unit tests and build APK
+        run: |
+          cd "$APP_DIR"
+          chmod +x gradlew
+          ./gradlew --no-daemon testDebugUnitTest assembleDebug -PscanBaseUrl="${{ steps.scan.outputs.url }}"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: KitchenLens-debug-apk
+          path: ${{ env.APP_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: ${{ env.APP_DIR }}/app/build/reports/tests/
+          if-no-files-found: ignore
