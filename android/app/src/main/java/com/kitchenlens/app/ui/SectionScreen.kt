@@ -97,7 +97,8 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
     var error by remember { mutableStateOf<String?>(null) }
     var note by remember { mutableStateOf<String?>(null) }
 
-    val k = kitchen ?: run { CenteredLoading(); return }
+    val k = kitchen
+    if (k == null) { CenteredLoading(); return }
 
     // ---- full-screen camera when capturing ----
     if (capturing != null) {

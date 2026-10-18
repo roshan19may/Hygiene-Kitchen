@@ -56,9 +56,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import kotlinx.coroutines.suspendCancellableCoroutine
+import androidx.concurrent.futures.await
 import java.io.File
-import kotlin.coroutines.resume
 
 enum class CaptureMode { PHOTO, VIDEO }
 
@@ -102,10 +101,7 @@ fun CameraCapture(
 }
 
 private suspend fun cameraProvider(context: Context): ProcessCameraProvider =
-    suspendCancellableCoroutine { cont ->
-        val future = ProcessCameraProvider.getInstance(context)
-        future.addListener({ cont.resume(future.get()) }, ContextCompat.getMainExecutor(context))
-    }
+    ProcessCameraProvider.getInstance(context).await()
 
 @Composable
 private fun CameraBody(

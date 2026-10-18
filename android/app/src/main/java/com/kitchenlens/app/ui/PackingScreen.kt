@@ -70,7 +70,8 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
     var progress by remember { mutableFloatStateOf(0f) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    val k = kitchen ?: run { CenteredLoading(); return }
+    val k = kitchen
+    if (k == null) { CenteredLoading(); return }
 
     if (recording) {
         CameraCapture(

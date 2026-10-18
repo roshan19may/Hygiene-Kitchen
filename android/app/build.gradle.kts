@@ -71,6 +71,9 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:$camerax")
     implementation("androidx.camera:camera-video:$camerax")
     implementation("androidx.camera:camera-view:$camerax")
+    // CameraX hands back a ListenableFuture; these make that type available and add .await()
+    implementation("androidx.concurrent:concurrent-futures-ktx:1.2.0")
+    implementation("com.google.guava:guava:33.3.1-android")
 
     // Firebase: login, database, file storage (hosted in Mumbai region)
     implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
