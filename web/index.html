@@ -4,132 +4,146 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <!--KL:HEAD-START-->
-<title>KitchenLens Seal</title>
+<title>KitchenLens | Food Packing Report</title>
+<meta name="description" content="View the kitchen-recorded hygiene and food packing details linked to your order seal.">
+<meta name="theme-color" content="#176b4b">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500;700&display=swap">
 <style>
-/* Layout: one phone-width column. The tamper seal opens the page, then the
-   packing clip, then a timeline of hygiene proof counted back from packing. */
+
 :root {
-  --bg: #F2F5F3;          /* sage-tinted paper */
-  --surface: #FFFFFF;
-  --ink: #13221D;
-  --muted: #5B6B65;
-  --line: #D9E1DD;
-  --leaf: #0F5C4A;        /* brand */
-  --leaf-soft: #DDEFE8;
-  --turmeric: #E2A930;    /* seal accent */
-  --ok: #1E8E5A;
-  --warn: #C9771F;
-  --bad: #C0392B;
-  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
-  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0E1714; --surface: #15211D; --ink: #E7EFEB; --muted: #9DB0A8; --line: #2A3A34;
-    --leaf: #5CC7A4; --leaf-soft: #17332A; --turmeric: #F0BE55;
-    --ok: #4CC38A; --warn: #E9A04F; --bad: #F07A6C; color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #0E1714; --surface: #15211D; --ink: #E7EFEB; --muted: #9DB0A8; --line: #2A3A34;
-  --leaf: #5CC7A4; --leaf-soft: #17332A; --turmeric: #F0BE55;
-  --ok: #4CC38A; --warn: #E9A04F; --bad: #F07A6C; color-scheme: dark;
+  color-scheme: light;
+  --bg: #f4f7f5;
+  --surface: #ffffff;
+  --ink: #172b24;
+  --muted: #62736b;
+  --line: #dce6e0;
+  --brand: #176b4b;
+  --brand-dark: #10543a;
+  --brand-soft: #e8f4ed;
+  --accent: #d6a33b;
+  --ok: #18794e;
+  --warn: #a85a12;
+  --bad: #b42318;
+  --shadow: 0 8px 28px rgba(23, 43, 36, .055);
+  --font-display: Inter, "Segoe UI", system-ui, sans-serif;
+  --font-body: Inter, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 * { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
-  font: 16px/1.5 var(--font-body);
-  padding-left: max(16px, env(safe-area-inset-left, 0px));
-  padding-right: max(16px, env(safe-area-inset-right, 0px));
-  padding-block: 20px 40px;
+  font: 15px/1.55 var(--font-body);
+  padding: 24px 16px 48px;
+  -webkit-font-smoothing: antialiased;
 }
-main { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
-h1, h2 { font-family: var(--font-display); text-wrap: balance; margin: 0; }
-h1 { font-size: 1.7rem; line-height: 1.15; font-weight: 800; }
-h2 { font-size: 1.15rem; font-weight: 600; }
-.eyebrow { font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+main { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+h1, h2, h3, p { margin-top: 0; }
+h1 { font-size: clamp(1.55rem, 5vw, 2rem); line-height: 1.15; letter-spacing: -.035em; margin-bottom: 6px; }
+h2 { font-size: 1.12rem; line-height: 1.3; letter-spacing: -.015em; margin-bottom: 0; }
+h3 { font-size: .98rem; margin-bottom: 4px; }
+p { margin-bottom: 0; }
+a { color: var(--brand); font-weight: 650; text-underline-offset: 3px; overflow-wrap: anywhere; }
+button, input, select { font: inherit; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 3px solid #77b89a; outline-offset: 3px;
+}
 .muted { color: var(--muted); }
-.small { font-size: .875rem; }
-.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-a { color: var(--leaf); font-weight: 700; }
-
-/* Seal */
-.seal { display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: center; }
-.stamp {
-  width: 104px; height: 104px; border-radius: 50%;
-  border: 3px dashed var(--turmeric); display: grid; place-items: center; text-align: center;
-  background: var(--surface);
-}
-.stamp b { display: block; font-family: var(--font-display); font-size: .8rem; letter-spacing: .06em; color: var(--leaf); }
-.stamp span { font-family: var(--font-mono); font-size: .8rem; }
-.kitchen { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-
-/* Clip */
-.clip { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
-.clip video, .clip .placeholder { display: block; width: 100%; max-width: 100%; aspect-ratio: 9 / 12; background: #000; object-fit: cover; }
-.clip .placeholder {
-  display: grid; place-items: center; color: #fff; text-align: center; padding: 16px;
-  background: repeating-linear-gradient(135deg, #0F5C4A 0 18px, #0d5243 18px 36px);
-  font-family: var(--font-display); font-size: 1.1rem;
-}
-.clip figcaption { padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; }
-
-/* Stats */
-.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
-.stat .v { font-family: var(--font-mono); font-size: 1.6rem; font-weight: 700; }
-.stat .l { font-size: .85rem; color: var(--muted); }
+.small { font-size: .86rem; }
+.eyebrow { font-size: .72rem; letter-spacing: .105em; text-transform: uppercase; color: var(--muted); font-weight: 750; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: clamp(16px, 4vw, 24px); box-shadow: var(--shadow); min-width: 0; }
+.demo { background: #fff7e5; border: 1px solid #f0d79a; color: #624715; border-radius: 12px; padding: 12px 14px; font-size: .9rem; }
+.err { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 22px; box-shadow: var(--shadow); }
+.brandbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.brandmark { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brandicon { width: 42px; height: 42px; border-radius: 13px; background: var(--brand-soft); color: var(--brand); display: grid; place-items: center; font-size: 1.2rem; font-weight: 800; flex: 0 0 auto; }
+.brandname { font-weight: 800; letter-spacing: -.02em; }
+.brandtag { font-size: .76rem; color: var(--muted); }
+.status-pill { display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; padding: 6px 10px; background: var(--brand-soft); color: var(--brand-dark); font-size: .78rem; font-weight: 750; white-space: nowrap; }
+.status-pill::before { content: ""; width: 7px; height: 7px; background: currentColor; border-radius: 50%; }
+.reporthead { display: flex; flex-direction: column; gap: 18px; }
+.kitchenrow { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.kitchen { min-width: 0; }
+.kitchenmeta { color: var(--muted); font-size: .86rem; overflow-wrap: anywhere; }
+.sealcode { flex: 0 0 auto; border: 1px dashed #c4d6ca; background: #f7fbf8; border-radius: 12px; padding: 9px 12px; text-align: center; min-width: 92px; }
+.sealcode .eyebrow { font-size: .64rem; }
+.sealcode .mono { font-weight: 800; color: var(--brand-dark); font-size: .92rem; }
+.reporttitle { display: flex; flex-direction: column; gap: 5px; }
+.reporttitle p { color: var(--muted); max-width: 58ch; }
+.orderfacts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.fact { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #fbfdfb; min-width: 0; }
+.fact .label { color: var(--muted); font-size: .72rem; font-weight: 750; text-transform: uppercase; letter-spacing: .06em; }
+.fact .value { margin-top: 4px; font-size: .93rem; font-weight: 700; overflow-wrap: anywhere; }
+.sectionhead { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+.sectionhead p { color: var(--muted); font-size: .87rem; margin-top: 4px; }
+.video { border-radius: 14px; overflow: hidden; background: #edf3ef; border: 1px solid var(--line); }
+.video video, .clip video { display: block; width: 100%; max-height: 440px; object-fit: cover; background: #10231a; }
+.placeholder { min-height: 150px; display: grid; place-items: center; text-align: center; padding: 24px; color: var(--muted); background: repeating-linear-gradient(135deg, #f3f8f4 0 18px, #eaf2ec 18px 36px); }
+.clip figcaption { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 6px 14px; padding: 12px 14px; background: #fbfdfb; font-size: .85rem; }
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.stat { border: 1px solid var(--line); border-radius: 15px; padding: 17px; background: var(--surface); min-width: 0; }
+.stathead { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.stat .v { font-size: clamp(1.6rem, 5vw, 2.05rem); line-height: 1.15; font-weight: 800; letter-spacing: -.04em; font-variant-numeric: tabular-nums; margin: 12px 0 5px; }
+.stat .l { color: var(--muted); font-size: .84rem; }
+.stat .hint { color: var(--muted); font-size: .75rem; margin-top: 10px; }
 .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
-
-/* Timeline */
+.pill { display: inline-flex; border-radius: 7px; padding: 4px 8px; font-size: .72rem; font-weight: 800; background: #eef2ef; color: var(--muted); }
+.pill.ok { background: #e7f5ec; color: var(--ok); }
+.pill.warn { background: #fff1db; color: var(--warn); }
+.pill.bad { background: #fdecea; color: var(--bad); }
 .timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.timeline li { display: grid; grid-template-columns: 22px 1fr; gap: 10px; }
+.timeline li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 12px; }
 .rail { position: relative; }
-.rail::before { content: ""; position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: var(--line); }
+.rail::before { content: ""; position: absolute; left: 11px; top: 0; bottom: 0; width: 2px; background: var(--line); }
 .timeline li:last-child .rail::before { bottom: 50%; }
-.dot { position: absolute; left: 4px; top: 18px; width: 14px; height: 14px; border-radius: 50%; background: var(--leaf); border: 3px solid var(--bg); }
-.dot.packed { background: var(--turmeric); }
-.entry { padding-block: 10px; min-width: 0; }
-.entry button {
-  all: unset; cursor: pointer; display: flex; justify-content: space-between; gap: 12px; width: 100%;
-  border-radius: 8px;
+.dot { position: absolute; left: 5px; top: 19px; width: 14px; height: 14px; border-radius: 50%; background: var(--brand); border: 3px solid #fff; box-shadow: 0 0 0 1px var(--line); }
+.dot.packed { background: var(--accent); }
+.entry { padding: 10px 0 18px; min-width: 0; }
+.entry button { appearance: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; text-align: left; border: 0; padding: 0; background: transparent; color: inherit; border-radius: 8px; }
+.entry .title { font-weight: 750; }
+.entry .when { display: inline-block; font-family: var(--font-mono); font-size: .76rem; color: var(--muted); margin-top: 3px; }
+.entry .act { color: var(--brand); font-size: .83rem; font-weight: 750; white-space: nowrap; }
+.entry .det { margin-top: 7px; font-size: .84rem; color: var(--muted); overflow-wrap: anywhere; }
+.media { margin-top: 12px; }
+.media img, .media video { width: 100%; max-width: 100%; max-height: 440px; border-radius: 12px; display: block; object-fit: contain; background: #f0f4f1; }
+.gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.media .placeholder { border-radius: 12px; min-height: 110px; }
+.notice { background: #f5f8f6; border: 1px solid var(--line); border-radius: 12px; padding: 13px 14px; font-size: .84rem; color: var(--muted); }
+.reportactions { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn { appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 11px; padding: 11px 15px; font-weight: 750; cursor: pointer; }
+.btn.primary { background: var(--brand); color: #fff; border-color: var(--brand); }
+.btn:hover { filter: brightness(.97); }
+.lookup { display: flex; flex-direction: column; gap: 9px; }
+.lookup label { font-weight: 750; font-size: .86rem; }
+.lookup select, .lookup input { font: inherit; padding: 12px 13px; border-radius: 10px; border: 1px solid var(--line); background: #fbfdfb; color: var(--ink); width: 100%; }
+.lookup button { font: inherit; font-weight: 750; padding: 12px 14px; border-radius: 10px; border: 0; cursor: pointer; background: var(--brand); color: #fff; }
+.footer { color: var(--muted); font-size: .82rem; display: flex; flex-direction: column; gap: 8px; padding: 4px 2px; }
+.footer strong { color: var(--ink); }
+@media (max-width: 520px) {
+  body { padding: 14px 12px 32px; }
+  main { gap: 13px; }
+  .kitchenrow { flex-direction: column; }
+  .sealcode { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; text-align: left; }
+  .orderfacts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stats { gap: 9px; }
+  .stat { padding: 13px; }
+  .reportactions .btn { flex: 1 1 140px; }
 }
-.entry button:focus-visible { outline: 2px solid var(--leaf); outline-offset: 4px; }
-.entry .title { font-weight: 700; }
-.entry .when { font-family: var(--font-mono); font-size: .8rem; color: var(--muted); }
-.entry .act { color: var(--leaf); font-weight: 700; white-space: nowrap; }
-.entry .det { font-size: .875rem; color: var(--muted); }
-.media { margin-top: 8px; }
-.media img, .media video { width: 100%; max-width: 100%; border-radius: 10px; display: block; }
-.gallery { display: flex; flex-direction: column; gap: 8px; }
-.media .placeholder {
-  border-radius: 10px; aspect-ratio: 4 / 3; max-width: 100%; display: grid; place-items: center;
-  background: var(--leaf-soft); color: var(--leaf); font-weight: 700; text-align: center; padding: 12px;
+@media print {
+  @page { size: A4; margin: 14mm; }
+  body { background: #fff; padding: 0; color: #172b24; font-size: 10pt; }
+  main { max-width: none; gap: 10px; }
+  .card, .stat { box-shadow: none; break-inside: avoid; }
+  .reportactions, .entry .act { display: none !important; }
+  .media[hidden] { display: none !important; }
+  a { color: inherit; }
+  .clip video { max-height: 220px; }
 }
 
-.lookup { display: flex; flex-direction: column; gap: 8px; }
-.lookup label { font-weight: 700; font-size: .875rem; }
-.lookup select, .lookup input {
-  font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
-  background: var(--bg); color: var(--ink); width: 100%; max-width: 100%;
-}
-.lookup button {
-  font: inherit; font-weight: 700; padding: 12px; border-radius: 10px; border: 0; cursor: pointer;
-  background: var(--leaf); color: var(--surface);
-}
-.lookup :focus-visible { outline: 2px solid var(--leaf); outline-offset: 2px; }
-.note { border-top: 1px solid var(--line); padding-top: 14px; font-size: .85rem; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
-.demo { background: var(--leaf-soft); color: var(--ink); border-radius: 10px; padding: 10px 12px; font-size: .875rem; }
-.err { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
-@media (prefers-reduced-motion: no-preference) {
-  .stamp { animation: press .5s ease-out both; }
-  @keyframes press { from { transform: scale(1.12) rotate(-8deg); } to { transform: none; } }
-}
 </style>
 <!--KL:HEAD-END-->
 <script src="config.js"></script>
@@ -268,7 +282,7 @@ a { color: var(--leaf); font-weight: 700; }
     return Math.round(min / 1440) + " days before packing";
   }
   function fmt(t) {
-    return new Date(t).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+    return new Date(t).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
   }
   function detailLine(d) {
     d = d || {};
@@ -306,49 +320,81 @@ a { color: var(--leaf); font-weight: 700; }
 
     var clipUrl = safeUrl(o.clipUrl);
     var clip = clipUrl
-      ? '<video src="' + esc(clipUrl) + '" controls muted playsinline autoplay loop preload="auto"></video>'
-      : '<div class="placeholder">' + (o.demo ? "Sample order: the 18-second packing clip plays here"
-        : o.offline ? "The packing clip was recorded and is stored on the kitchen's phone. It appears here once the kitchen connects cloud storage."
-        : "Clip not available") + "</div>";
+      ? '<video src="' + esc(clipUrl) + '" controls muted playsinline preload="metadata"></video>'
+      : '<div class="placeholder">' + (o.demo ? "Sample packing video preview. Actual customer reports show the recorded packing clip when available."
+        : o.offline ? "The packing clip is saved on the kitchen device and will appear here when cloud media is available."
+        : "A packing clip is not available for this report.") + "</div>";
 
     var tempTone = o.tempOk ? "ok" : "bad";
-    var tempNote = o.tempOk ? (o.foodType === "Cold" ? "Kept cold (5°C or below)" : "Hot (50°C or above)")
-      : (o.foodType === "Cold" ? "Warmer than 5°C at packing" : "Below the 50°C guideline at packing");
-
+    var foodType = o.foodType === "Cold" ? "Cold food" : "Hot food";
+    var tempNote = o.tempOk
+      ? (o.foodType === "Cold" ? "Meets the kitchen's recorded cold-food guideline" : "Meets the kitchen's recorded hot-food guideline")
+      : (o.foodType === "Cold" ? "Outside the kitchen's recorded cold-food guideline" : "Below the kitchen's recorded hot-food guideline");
+    var tempStatus = o.tempOk ? "Guideline met" : "Review recorded";
+    var scoreValue = Number(o.score);
+    if (!Number.isFinite(scoreValue)) scoreValue = 0;
+    scoreValue = Math.max(0, Math.min(100, Math.round(scoreValue)));
+    var scoreTone = tone(scoreValue);
+    var scoreLabel = scoreValue >= 80 ? "Higher recorded indicators" : scoreValue >= 50 ? "Some checks need attention" : "Limited recorded indicators";
+    var displayOrder = o.orderRefLast4 ? "•••• " + String(o.orderRefLast4).slice(-4)
+      : o.orderRef ? "•••• " + String(o.orderRef).slice(-4) : "Not provided";
+    var kitchenLocation = [o.kitchenLocality, o.kitchenCity].filter(Boolean).join(", ");
+    var packedDate = packed ? fmt(packed) : "Not recorded";
+    var packer = o.packerName || "Kitchen team";
     var timeline = rows.map(function (r, i) {
       return '<li><div class="rail"><span class="dot"></span></div><div class="entry">' +
         '<button type="button" aria-expanded="false" data-i="' + i + '">' +
-        '<span><span class="title">' + esc(r.label) + '</span><br><span class="when">' + esc(beforePacking(r.at, packed)) + "</span></span>" +
-        '<span class="act">' + (r.mediaType === "video" ? "Watch" : "View") + "</span></button>" +
+        '<span><span class="title">' + esc(r.label) + '</span><br><span class="when">' + esc(beforePacking(r.at, packed)) + " · " + esc(fmt(r.at)) + "</span></span>" +
+        '<span class="act">' + (r.mediaType === "video" ? "View clip +" : "View evidence +") + "</span></button>" +
         (detailLine(r.details) ? '<div class="det">' + esc(detailLine(r.details)) + "</div>" : "") +
         '<div class="media" hidden data-m="' + i + '"></div></div></li>';
     }).join("") +
       '<li><div class="rail"><span class="dot packed"></span></div><div class="entry">' +
-      '<span class="title">Your order packed and sealed</span><br><span class="when">' + esc(fmt(packed)) + " · by " + esc(o.packerName) + "</span></div></li>";
+      '<span class="title">Order packed and sealed</span><br><span class="when">' + esc(packedDate) + " · recorded by " + esc(packer) + "</span></div></li>";
 
     app.innerHTML =
-      (o.demo ? '<div class="demo">This is a sample page. A real seal shows the kitchen\'s own clip and records for your order.</div>' : "") +
-      '<section class="seal">' +
-        '<div class="stamp" aria-hidden="true"><div><b>SEALED</b><span>' + esc(code.slice(0, 4)) + "<br>" + esc(code.slice(4)) + "</span></div></div>" +
-        '<div class="kitchen"><span class="eyebrow">How your food was packed</span>' +
-        "<h1>" + esc(o.kitchenName) + "</h1>" +
-        '<span class="muted small">' + esc([o.kitchenLocality, o.kitchenCity].filter(Boolean).join(", ")) + ' · FSSAI <span class="mono">' + esc(o.fssai) + "</span>" +
-        (o.gstin ? ' · GSTIN <span class="mono">' + esc(o.gstin) + "</span>" : "") + "</span></div>" +
-      "</section>" +
-      '<figure class="clip" style="margin:0">' + clip +
-        '<figcaption><span><b>Packing clip</b> · no sound</span><span class="muted small">' +
-        esc(o.platform) + ' order <span class="mono">#' + esc(o.orderRef || ("··" + (o.orderRefLast4 || ""))) + "</span></span></figcaption></figure>" +
+      (o.demo ? '<div class="demo"><strong>Preview report</strong> — This is illustrative sample data, not a live order or verified inspection. Actual reports display the records saved by the kitchen.</div>' : "") +
+      (o.offline && !o.hasCloud ? '<div class="demo">Some media is stored on the kitchen device and may not be visible until cloud storage is connected.</div>' : "") +
+      '<section class="card reporthead">' +
+        '<div class="brandbar"><div class="brandmark"><div class="brandicon" aria-hidden="true">K</div><div><div class="brandname">KitchenLens</div><div class="brandtag">Food packing transparency report</div></div></div>' +
+        '<span class="status-pill">Seal record</span></div>' +
+        '<div class="kitchenrow"><div class="kitchen"><div class="eyebrow">Prepared by</div><h1>' + esc(o.kitchenName || "Kitchen team") + '</h1>' +
+          '<div class="kitchenmeta">' + esc(kitchenLocation || "Location not provided") + '</div>' +
+          (o.fssai ? '<div class="kitchenmeta">FSSAI licence: <span class="mono">' + esc(o.fssai) + "</span></div>" : "") +
+          (o.gstin ? '<div class="kitchenmeta">GSTIN: <span class="mono">' + esc(o.gstin) + "</span></div>" : "") +
+        '</div><div class="sealcode"><div><div class="eyebrow">Seal reference</div><div class="mono">' + esc(code) + '</div></div></div></div>' +
+        '<div class="reporttitle"><div class="eyebrow">Your order, transparently packed</div><p>This report summarises the preparation and hygiene records the kitchen had logged when your order was packed.</p></div>' +
+        '<div class="orderfacts">' +
+          '<div class="fact"><div class="label">Order platform</div><div class="value">' + esc(o.platform || "Not recorded") + '</div></div>' +
+          '<div class="fact"><div class="label">Order reference</div><div class="value mono">' + esc(displayOrder) + '</div></div>' +
+          '<div class="fact"><div class="label">Food category</div><div class="value">' + esc(foodType) + '</div></div>' +
+          '<div class="fact"><div class="label">Packed at</div><div class="value">' + esc(packedDate) + '</div></div>' +
+          '<div class="fact"><div class="label">Packed by</div><div class="value">' + esc(packer) + '</div></div>' +
+          '<div class="fact"><div class="label">Record status</div><div class="value">Kitchen-recorded</div></div>' +
+        '</div>' +
+      '</section>' +
+      '<section class="card"><div class="sectionhead"><div><h2>Packing evidence</h2><p>Recorded video of the packing process, where available.</p></div><span class="pill">No audio</span></div>' +
+        '<figure class="clip video" style="margin:0">' + clip +
+          '<figcaption><span><strong>Packing clip</strong><br><span class="muted">Video is recorded without sound</span></span><span class="muted small">' + esc(o.platform || "Order") + ' · ' + esc(displayOrder) + '</span></figcaption></figure>' +
+      '</section>' +
       '<section class="stats">' +
-        '<div class="stat"><div class="v ' + tempTone + '">' + esc(Math.round(o.tempC)) + '°C</div><div class="l">' + esc(tempNote) + "</div></div>" +
-        '<div class="stat"><div class="v ' + tone(o.score) + '">' + esc(o.score) + '<span class="small muted">/100</span></div><div class="l">Kitchen hygiene score at packing</div></div>' +
-      "</section>" +
-      '<section style="display:flex;flex-direction:column;gap:8px"><h2>Before your order was packed</h2>' +
-        (rows.length ? "" : '<p class="muted">The kitchen logged no hygiene records before this order.</p>') +
-        '<ol class="timeline">' + timeline + "</ol></section>" +
-      '<section class="note"><span>Check that the seal on your bag is not torn. If the seal code above does not match the sticker, report it.</span>' +
-        "<span>This page shows the kitchen's own recorded process. It is not a food-safety certification.</span>" +
-        (CFG.supportEmail ? '<span>Report a problem: <a href="mailto:' + esc(CFG.supportEmail) + "?subject=Seal%20" + esc(code) + '">' + esc(CFG.supportEmail) + "</a> (quote code " + esc(code) + ")</span>" : "") +
-      "</section>";
+        '<div class="stat"><div class="stathead"><span class="eyebrow">Temperature at packing</span><span class="pill ' + tempTone + '">' + esc(tempStatus) + '</span></div>' +
+          '<div class="v ' + tempTone + '">' + (Number.isFinite(Number(o.tempC)) ? esc(Number(o.tempC).toFixed(1).replace(/\.0$/, "")) + "°C" : "Not recorded") + '</div>' +
+          '<div class="l">' + esc(tempNote) + '</div><div class="hint">Food type: ' + esc(foodType) + '. This is a recorded handling check, not a laboratory test.</div></div>' +
+        '<div class="stat"><div class="stathead"><span class="eyebrow">Hygiene record score</span><span class="pill ' + scoreTone + '">' + esc(scoreLabel) + '</span></div>' +
+          '<div class="v ' + scoreTone + '">' + esc(scoreValue) + '<span class="small muted"> / 100</span></div>' +
+          '<div class="l">Kitchen process-record indicator at packing</div><div class="hint">This score reflects recorded checks and freshness of records; it is not a food-safety certification or a guarantee of the meal.</div></div>' +
+      '</section>' +
+      '<section class="card"><div class="sectionhead"><div><h2>Preparation & hygiene timeline</h2><p>Records shown in time order. Open an item to view its available evidence.</p></div></div>' +
+        (rows.length ? '<ol class="timeline">' + timeline + '</ol>' : '<div class="notice">No earlier hygiene records were linked to this order at the time the report was created. Please contact the kitchen if you need clarification.</div>') +
+      '</section>' +
+      '<section class="card"><div class="sectionhead"><div><h2>Before you enjoy your meal</h2><p>A few quick checks to help you verify the package.</p></div></div>' +
+        '<div class="notice">• Check that the bag seal is intact and the printed seal reference matches this report.<br>• Follow the storage and consumption instructions on the food label.<br>• If the seal is broken, the order details look incorrect, or you have a concern, contact the kitchen using the details below.</div>' +
+      '</section>' +
+      '<div class="reportactions"><button class="btn primary" type="button" id="print-report">Print / Save as PDF</button><button class="btn" type="button" id="back-top">Back to top</button></div>' +
+      '<footer class="footer"><strong>About this report</strong><span>This page presents the kitchen’s own recorded preparation and packing process. It is provided for transparency and does not constitute independent inspection, laboratory testing, or regulatory certification.</span>' +
+        (CFG.supportEmail ? '<span>Questions or concerns? <a href="mailto:' + esc(CFG.supportEmail) + '?subject=KitchenLens%20seal%20' + encodeURIComponent(code) + '">' + esc(CFG.supportEmail) + '</a> · Please quote seal reference <span class="mono">' + esc(code) + '</span>.</span>' : '') +
+        '<span>Report generated for this seal reference: <span class="mono">' + esc(code) + '</span>.</span></footer>';
 
     app.querySelectorAll("button[data-i]").forEach(function (b) {
       b.addEventListener("click", function () {
@@ -358,13 +404,14 @@ a { color: var(--leaf); font-weight: 700; }
         if (open && !box.innerHTML) box.innerHTML = mediaHtml(rows[i], o.demo, o.offline);
         box.hidden = !open;
         b.setAttribute("aria-expanded", String(open));
-        b.querySelector(".act").textContent = open ? "Hide" : (rows[i].mediaType === "video" ? "Watch" : "View");
+        b.querySelector(".act").textContent = open ? "Hide evidence −" : (rows[i].mediaType === "video" ? "View clip +" : "View evidence +");
       });
     });
-    if (o.offline && !o.hasCloud) {
-      app.insertAdjacentHTML("afterbegin", '<div class="demo">Order details below were saved inside this seal. Photos and clips are kept on the kitchen\'s phone until it connects cloud storage.</div>');
-    }
-    document.title = o.kitchenName ? o.kitchenName + " · Seal " + code : "KitchenLens Seal";
+    var printButton = document.getElementById("print-report");
+    if (printButton) printButton.addEventListener("click", function () { window.print(); });
+    var topButton = document.getElementById("back-top");
+    if (topButton) topButton.addEventListener("click", function () { window.scrollTo({ top: 0, behavior: "smooth" }); });
+    document.title = (o.kitchenName || "Kitchen") + " · Food packing report · " + code;
   }
 
   function showError(msg, withLookup) {

@@ -180,3 +180,15 @@ and prepare secret masalas in a separate room in coded containers.
 5. **Auto-delete:** remove clips after 30 days unless linked to a complaint.
 6. **Billing:** kit orders, subscriptions and seal refills.
 7. **Languages:** Kannada, Hindi, Tamil and Telugu for staff screens.
+
+
+## Customer report redesign
+
+The public scan page (`web/index.html`) uses a customer-facing report layout with:
+- clearer kitchen identity, seal reference, order facts, packing evidence and timeline;
+- mobile-first cards, accessible focus states and print / Save as PDF support;
+- masked order references (only the final four digits are displayed);
+- plain-language explanations that the hygiene score is a record-coverage indicator, not a certification;
+- explicit distinction between a kitchen-recorded temperature guideline and independent food-safety validation.
+
+Before production use, review the temperature acceptance criteria against the kitchen's documented food-safety plan and applicable FSSAI requirements. The page intentionally does not describe a kitchen-entered score as independent certification.
