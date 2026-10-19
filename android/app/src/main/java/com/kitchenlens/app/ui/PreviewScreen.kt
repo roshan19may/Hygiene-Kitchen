@@ -149,7 +149,7 @@ private fun ProofRow(entry: Map<String, Any?>, packedAt: Long) {
     var open by remember { mutableStateOf(false) }
     val at = (entry["at"] as? Number)?.toLong() ?: 0L
     val isVideo = entry["mediaType"] == "video"
-    Card(Modifier.fillMaxWidth().clickable { open = !open }) {
+    Card(Modifier.fillMaxWidth().clickable(enabled = isVideo) { open = !open }) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(10.dp).background(Leaf, CircleShape))
@@ -158,20 +158,16 @@ private fun ProofRow(entry: Map<String, Any?>, packedAt: Long) {
                     Text(entry["label"] as? String ?: "", fontWeight = FontWeight.SemiBold)
                     Text(beforePacking(at, packedAt), style = MaterialTheme.typography.bodySmall)
                 }
-                Text(if (open) "Hide" else if (isVideo) "▶ Watch" else "View", color = Leaf, fontWeight = FontWeight.Bold)
+                if (isVideo) Text(if (open) "Hide" else "▶ Watch", color = Leaf, fontWeight = FontWeight.Bold)
             }
             val line = detailsLine(entry)
             if (line.isNotBlank()) Text(line, style = MaterialTheme.typography.bodySmall)
-            if (open) {
-                val url = entry["mediaUrl"] as? String
-                val urls = (entry["mediaUrls"] as? List<*>)?.filterIsInstance<String>().orEmpty().ifEmpty { listOfNotNull(url) }
-                if (isVideo) ClipPlayer(url, (entry["details"] as? Map<*, *>)?.get("recordedAt")?.toString()?.toLongOrNull() ?: at)
-                else urls.forEach { u ->
-                    AsyncImage(
-                        model = u, contentDescription = null, contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(10.dp)),
-                    )
-                }
+            val url = entry["mediaUrl"] as? String
+            val urls = (entry["mediaUrls"] as? List<*>)?.filterIsInstance<String>().orEmpty().ifEmpty { listOfNotNull(url) }
+            // Photos: thumbnails always visible, tap to enlarge
+            if (!isVideo) PhotoThumbs(urls, entry["label"] as? String ?: "Photo")
+            if (open && isVideo) {
+                ClipPlayer(url, (entry["details"] as? Map<*, *>)?.get("recordedAt")?.toString()?.toLongOrNull() ?: at)
             }
         }
     }

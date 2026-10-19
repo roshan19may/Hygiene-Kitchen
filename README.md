@@ -207,3 +207,7 @@ Before production use, review the temperature acceptance criteria against the ki
 - **Seal label** now reads "We care your Hygiene; scan the barcode for the proof." above the QR code.
 - **Pack an order** warns when any Kitchen Hygiene proof section is not entered, with **Go back**
   (scrolls to the Kitchen Hygiene proof list) or **Ignore** (continues to Pack an order).
+- **Photos in the customer report:** every evidence photo shows as a thumbnail (no tap needed);
+  tapping one opens a full-screen viewer with pinch / double-tap / +/− zoom, swipe or arrows to
+  move between photos, and "Open original". The app's "Preview what the customer sees" works the
+  same way. The sample report (`?c=DEMO`) includes sample photos to try it.

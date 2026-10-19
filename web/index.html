@@ -109,7 +109,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .dot { position: absolute; left: 5px; top: 19px; width: 14px; height: 14px; border-radius: 50%; background: var(--brand); border: 3px solid #fff; box-shadow: 0 0 0 1px var(--line); }
 .dot.packed { background: var(--accent); }
 .entry { padding: 10px 0 18px; min-width: 0; }
-.entry button { appearance: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; text-align: left; border: 0; padding: 0; background: transparent; color: inherit; border-radius: 8px; }
+.entry > button { appearance: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; text-align: left; border: 0; padding: 0; background: transparent; color: inherit; border-radius: 8px; }
 .entry .title { font-weight: 750; }
 .entry .when { display: inline-block; font-family: var(--font-mono); font-size: .76rem; color: var(--muted); margin-top: 3px; }
 .entry .act { color: var(--brand); font-size: .83rem; font-weight: 750; white-space: nowrap; }
@@ -117,6 +117,50 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .media { margin-top: 12px; }
 .media img, .media video { width: 100%; max-width: 100%; max-height: 440px; border-radius: 12px; display: block; object-fit: contain; background: #f0f4f1; }
 .gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+/* Always-visible photo thumbnails; tap to enlarge */
+.thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.entry .thumb, .thumb {
+  display: block; position: relative; width: 76px; height: 76px; padding: 0; border: 1px solid var(--line); border-radius: 10px;
+  overflow: hidden; background: #edf3ef; cursor: zoom-in; flex: 0 0 auto;
+}
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb .more {
+  position: absolute; inset: 0; display: grid; place-items: center; background: rgba(16, 35, 26, .62);
+  color: #fff; font-weight: 800; font-size: .95rem;
+}
+.thumb:focus-visible { outline: 3px solid #77b89a; outline-offset: 2px; }
+.thumbhint { font-size: .76rem; color: var(--muted); margin-top: 4px; }
+.entry .gallery .thumb, .gallery .thumb { width: 100%; height: auto; aspect-ratio: 1 / 1; }
+
+/* Full-screen photo viewer */
+.lb {
+  position: fixed; inset: 0; z-index: 100; background: #0b1410; color: #fff;
+  display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px);
+}
+.lb[hidden] { display: none !important; }
+.lb-bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
+.lb-title { flex: 1; min-width: 0; font-weight: 700; font-size: .92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-count { font: 700 .82rem/1 var(--font-mono); opacity: .8; }
+.lb-btn {
+  background: rgba(255, 255, 255, .14); color: #fff; border: 0; border-radius: 999px; min-width: 44px; height: 44px;
+  padding: 0 14px; font-size: 1rem; font-weight: 700; cursor: pointer; text-decoration: none;
+  display: inline-grid; place-items: center;
+}
+.lb-btn:hover { background: rgba(255, 255, 255, .24); }
+.lb-btn:focus-visible { outline: 3px solid #9fd6bb; outline-offset: 2px; }
+.lb-stage { position: relative; flex: 1; overflow: hidden; touch-action: none; display: grid; place-items: center; }
+.lb-stage img {
+  max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; -webkit-user-drag: none;
+  transform-origin: center center; transition: transform .12s ease-out; cursor: zoom-in;
+}
+.lb-stage.zoomed img { cursor: grab; transition: none; }
+.lb-nav { position: absolute; top: 50%; transform: translateY(-50%); }
+.lb-prev { left: 8px; } .lb-next { right: 8px; }
+.lb-foot { display: flex; justify-content: center; gap: 10px; padding: 10px 12px 14px; flex-wrap: wrap; }
+.lb-tip { text-align: center; font-size: .78rem; opacity: .7; padding: 0 12px 6px; }
+@media (prefers-reduced-motion: reduce) { .lb-stage img { transition: none; } }
 .media .placeholder { border-radius: 12px; min-height: 110px; }
 .notice { background: #f5f8f6; border: 1px solid var(--line); border-radius: 12px; padding: 13px 14px; font-size: .84rem; color: var(--muted); }
 .reportactions { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -146,6 +190,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .card, .stat { box-shadow: none; break-inside: avoid; }
   .reportactions, .entry .act { display: none !important; }
   .media[hidden] { display: none !important; }
+  .lb, .thumbhint { display: none !important; }
   a { color: inherit; }
   .clip video { max-height: 220px; }
 }
@@ -156,6 +201,24 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 </head>
 <body>
 <!--KL:BODY-START-->
+<div class="lb" id="lb" hidden role="dialog" aria-modal="true" aria-labelledby="lb-title">
+  <div class="lb-bar">
+    <span class="lb-title" id="lb-title"></span>
+    <span class="lb-count" id="lb-count"></span>
+    <button type="button" class="lb-btn" id="lb-close" aria-label="Close photo viewer">✕</button>
+  </div>
+  <div class="lb-stage" id="lb-stage">
+    <img id="lb-img" alt="">
+    <button type="button" class="lb-btn lb-nav lb-prev" id="lb-prev" aria-label="Previous photo">‹</button>
+    <button type="button" class="lb-btn lb-nav lb-next" id="lb-next" aria-label="Next photo">›</button>
+  </div>
+  <div class="lb-tip">Pinch or double-tap to zoom · swipe for the next photo</div>
+  <div class="lb-foot">
+    <button type="button" class="lb-btn" id="lb-zoomout" aria-label="Zoom out">−</button>
+    <button type="button" class="lb-btn" id="lb-zoomin" aria-label="Zoom in">+</button>
+    <a class="lb-btn" id="lb-open" href="#" target="_blank" rel="noopener">Open original</a>
+  </div>
+</div>
 <main id="app" aria-live="polite">
   <p class="muted">Loading your order…</p>
 </main>
@@ -172,7 +235,24 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
-  function safeUrl(u) { return /^https:\/\//.test(u || "") ? u : ""; }
+  /* https links, plus the built-in sample photos on the demo report */
+  function safeUrl(u) { return /^https:\/\//.test(u || "") || /^data:image\/svg\+xml;charset=utf-8,/.test(u || "") ? u : ""; }
+
+  /* Sample photo for the demo report: coloured scene with a burned-in style timestamp */
+  function samplePhoto(label, n, hue, at) {
+    label = String(label).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    var stamp = "KitchenLens · " + stampText(at);
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900">' +
+      '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(' + hue + ',55%,62%)"/>' +
+      '<stop offset="1" stop-color="hsl(' + (hue + 30) + ',50%,38%)"/></linearGradient></defs>' +
+      '<rect width="1200" height="900" fill="url(#g)"/>' +
+      '<g fill="rgba(255,255,255,.22)"><circle cx="300" cy="380" r="150"/><circle cx="620" cy="460" r="190"/><circle cx="930" cy="360" r="130"/></g>' +
+      '<text x="600" y="430" text-anchor="middle" font-family="Arial,sans-serif" font-size="64" font-weight="700" fill="#fff">' + label + '</text>' +
+      '<text x="600" y="505" text-anchor="middle" font-family="Arial,sans-serif" font-size="38" fill="#fff">Sample photo ' + n + '</text>' +
+      '<rect y="842" width="1200" height="58" fill="rgba(0,0,0,.6)"/>' +
+      '<text x="24" y="882" font-family="Courier New,monospace" font-size="30" font-weight="700" fill="#fff">' + stamp + '</text></svg>';
+    return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  }
 
   /* Order code from /o/CODE, ?c=CODE or #CODE */
   function readCode() {
@@ -268,12 +348,19 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
       return { at: p - hoursBefore * HOUR, label: label, mediaType: type, mediaUrl: "", details: details };
     }
     var snap = {};
-    snap[invKey("Vegetables")] = e("Vegetables received", 7.2, "photo", { category: "Vegetables", photoCount: "3", billDate: "today", billCount: "2", supplierGst: "registered", supplierType: "Local market" });
-    snap[invKey("Meat & Fish")] = e("Meat & Fish received", 5.5, "photo", { category: "Meat & Fish", billDate: "today", supplierType: "Wholesaler" });
+    snap[invKey("Vegetables")] = e("Vegetables received", 7.2, "photo", { category: "Vegetables", photoCount: "5", billDate: "today", billCount: "2", supplierGst: "registered", supplierType: "Local market" });
+    snap[invKey("Meat & Fish")] = e("Meat & Fish received", 5.5, "photo", { category: "Meat & Fish", photoCount: "2", billDate: "today", supplierType: "Wholesaler" });
     snap[invKey("Spices")] = e("Spices received", 24 * 9, "photo", { category: "Spices", supplierType: "Wholesaler" });
+    [["Vegetables", 105, 5], ["Meat & Fish", 4, 2], ["Spices", 32, 1]].forEach(function (c) {
+      var entry = snap[invKey(c[0])], urls = [];
+      for (var n = 1; n <= c[2]; n++) urls.push(samplePhoto(c[0], n, c[1] + n * 9, entry.at + n * 60000));
+      entry.mediaUrls = urls; entry.mediaUrl = urls[0];
+    });
     snap.UTENSILS = e("Utensils cleaned", 2.1, "video", { cleaningMedium: "Detergent, Hot water, Food-grade sanitiser", shift: "Afternoon" });
     snap.STAFF = e("Staff hygiene check", 2.6, "video", { checklist: "Hand-wash with soap, Cap / hairnet, Gloves, Clean apron", missing: "Mask", shift: "Afternoon" });
     snap.PEST = e("Pest control service", 24 * 14, "photo", { vendor: "SafeHome Pest Services", nextDueDate: "in 16 days" });
+    snap.PEST.mediaUrl = samplePhoto("Pest control report", 1, 200, snap.PEST.at);
+    snap.PEST.mediaUrls = [snap.PEST.mediaUrl];
     return {
       demo: true, kitchenName: "Biryani Box", kitchenLocality: "HSR Layout", kitchenCity: "Bengaluru",
       fssai: "11223344556677", gstin: "29ABCDE1234F1ZW", platform: "Swiggy", orderRef: "158823344471", orderRefLast4: "4471", packerName: "Asha",
@@ -332,19 +419,165 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
   function tone(score) { return score >= 80 ? "ok" : score >= 50 ? "warn" : "bad"; }
 
-  function mediaHtml(entry, demo, offline) {
+  /* Small square thumbnail URL (Cloudinary resizes on the fly; other hosts use the original) */
+  function thumbUrl(u) {
+    return String(u).replace("/image/upload/f_auto,q_auto,w_900/", "/image/upload/c_fill,w_240,h_240,f_auto,q_auto/");
+  }
+  /* Full-size URL for the viewer */
+  function fullUrl(u) {
+    return String(u).replace("/image/upload/f_auto,q_auto,w_900/", "/image/upload/f_auto,q_auto,w_1800/");
+  }
+  function photoUrls(entry) {
+    if (!entry || entry.mediaType === "video") return [];
+    var many = (entry.mediaUrls || []).map(safeUrl).filter(Boolean);
+    if (!many.length && safeUrl(entry.mediaUrl)) many = [safeUrl(entry.mediaUrl)];
+    return many;
+  }
+  /* Row of thumbnails shown without opening anything; "+N" when there are more */
+  function thumbsHtml(entry, rowIndex, max) {
+    var urls = photoUrls(entry);
+    if (!urls.length) return "";
+    var shown = urls.slice(0, max), extra = urls.length - shown.length;
+    return '<div class="thumbs">' + shown.map(function (u, j) {
+      var last = j === shown.length - 1 && extra > 0;
+      return '<button type="button" class="thumb" data-row="' + rowIndex + '" data-ph="' + j + '" aria-label="Enlarge ' +
+        esc(entry.label) + " photo " + (j + 1) + " of " + urls.length + '">' +
+        '<img src="' + esc(thumbUrl(u)) + '" alt="" loading="lazy">' +
+        (last ? '<span class="more">+' + extra + "</span>" : "") + "</button>";
+    }).join("") + '</div><div class="thumbhint">Tap a photo to enlarge</div>';
+  }
+
+  function mediaHtml(entry, demo, offline, rowIndex) {
     var url = safeUrl(entry.mediaUrl);
     var many = (entry.mediaUrls || []).map(safeUrl).filter(Boolean);
     if (entry.mediaType !== "video" && many.length > 1) {
       return '<div class="gallery">' + many.map(function (u, i) {
-        return '<img src="' + esc(u) + '" alt="' + esc(entry.label) + " photo " + (i + 1) + '" loading="lazy">';
+        return '<button type="button" class="thumb" data-row="' + rowIndex + '" data-ph="' + i + '" aria-label="Enlarge ' +
+          esc(entry.label) + " photo " + (i + 1) + '"><img src="' + esc(u) + '" alt="' + esc(entry.label) + " photo " + (i + 1) + '" loading="lazy"></button>';
       }).join("") + "</div>";
     }
     if (!url && offline) return '<div class="placeholder">This ' + (entry.mediaType === "video" ? "clip" : "photo") + " is stored on the kitchen's phone. It appears here once the kitchen connects cloud storage.</div>";
     if (!url) return '<div class="placeholder">' + (demo ? "Sample: the kitchen's " + (entry.mediaType === "video" ? "clip" : "photo") + " appears here" : "Media unavailable") + "</div>";
     return entry.mediaType === "video"
       ? stampedVideo(url, clipStart(entry))
-      : '<img src="' + esc(url) + '" alt="' + esc(entry.label) + '" loading="lazy">';
+      : '<button type="button" class="thumb" style="width:100%;height:auto" data-row="' + rowIndex + '" data-ph="0" aria-label="Enlarge ' +
+        esc(entry.label) + ' photo"><img src="' + esc(url) + '" alt="' + esc(entry.label) + '" loading="lazy" style="max-height:440px;object-fit:contain"></button>';
+  }
+
+  /* ---------- Full-screen photo viewer with zoom and swipe ---------- */
+  var LB = { photos: [], title: "", i: 0, scale: 1, x: 0, y: 0, opener: null };
+  function $(id) { return document.getElementById(id); }
+  function lbApply() {
+    var img = $("lb-img");
+    img.style.transform = "translate(" + LB.x + "px," + LB.y + "px) scale(" + LB.scale + ")";
+    $("lb-stage").classList.toggle("zoomed", LB.scale > 1.01);
+  }
+  function lbZoom(next) {
+    LB.scale = Math.max(1, Math.min(5, next));
+    if (LB.scale === 1) { LB.x = 0; LB.y = 0; }
+    lbApply();
+  }
+  function lbShow(i) {
+    var n = LB.photos.length;
+    LB.i = (i + n) % n; LB.scale = 1; LB.x = 0; LB.y = 0;
+    var u = LB.photos[LB.i];
+    $("lb-img").src = fullUrl(u);
+    $("lb-img").alt = LB.title + " photo " + (LB.i + 1);
+    $("lb-open").href = fullUrl(u);
+    $("lb-count").textContent = n > 1 ? (LB.i + 1) + " / " + n : "";
+    $("lb-prev").hidden = $("lb-next").hidden = n < 2;
+    lbApply();
+  }
+  function lbOpen(photos, title, start, opener) {
+    if (!photos.length) return;
+    LB.photos = photos; LB.title = title || "Photo"; LB.opener = opener || null;
+    $("lb-title").textContent = LB.title;
+    $("lb").hidden = false;
+    document.body.style.overflow = "hidden";
+    lbShow(start || 0);
+    $("lb-close").focus();
+  }
+  function lbClose() {
+    $("lb").hidden = true;
+    document.body.style.overflow = "";
+    $("lb-img").removeAttribute("src");
+    if (LB.opener && LB.opener.focus) LB.opener.focus();
+  }
+  function lbInit() {
+    var lb = $("lb"), stage = $("lb-stage"), img = $("lb-img");
+    if (!lb || lb.dataset.ready) return;
+    lb.dataset.ready = "1";
+    $("lb-close").addEventListener("click", lbClose);
+    $("lb-prev").addEventListener("click", function (e) { e.stopPropagation(); lbShow(LB.i - 1); });
+    $("lb-next").addEventListener("click", function (e) { e.stopPropagation(); lbShow(LB.i + 1); });
+    $("lb-zoomin").addEventListener("click", function () { lbZoom(LB.scale * 1.6); });
+    $("lb-zoomout").addEventListener("click", function () { lbZoom(LB.scale / 1.6); });
+    document.addEventListener("keydown", function (e) {
+      if (lb.hidden) return;
+      if (e.key === "Escape") lbClose();
+      else if (e.key === "ArrowLeft") lbShow(LB.i - 1);
+      else if (e.key === "ArrowRight") lbShow(LB.i + 1);
+      else if (e.key === "+" || e.key === "=") lbZoom(LB.scale * 1.6);
+      else if (e.key === "-") lbZoom(LB.scale / 1.6);
+      else if (e.key === "Tab") { /* keep focus inside the viewer */
+        var f = Array.prototype.filter.call(lb.querySelectorAll("button, a"), function (el) { return !el.hidden; });
+        var first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    });
+    stage.addEventListener("click", function (e) { if (e.target === stage) lbClose(); });
+    stage.addEventListener("dblclick", function (e) { e.preventDefault(); lbZoom(LB.scale > 1 ? 1 : 2.5); });
+    stage.addEventListener("wheel", function (e) { e.preventDefault(); lbZoom(LB.scale * (e.deltaY < 0 ? 1.15 : 1 / 1.15)); }, { passive: false });
+
+    /* Touch / pointer: pinch to zoom, drag to pan when zoomed, swipe to change photo, double-tap to zoom */
+    var pts = {}, start = null, lastTap = 0;
+    function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+    stage.addEventListener("pointerdown", function (e) {
+      if (e.target.closest && e.target.closest("button")) return;
+      stage.setPointerCapture(e.pointerId);
+      pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+      var ids = Object.keys(pts);
+      if (ids.length === 2) {
+        start = { pinch: dist(pts[ids[0]], pts[ids[1]]), scale: LB.scale };
+      } else {
+        start = { x: e.clientX, y: e.clientY, ox: LB.x, oy: LB.y, t: Date.now() };
+        if (Date.now() - lastTap < 300) { lbZoom(LB.scale > 1 ? 1 : 2.5); lastTap = 0; } else lastTap = Date.now();
+      }
+    });
+    stage.addEventListener("pointermove", function (e) {
+      if (!pts[e.pointerId] || !start) return;
+      pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+      var ids = Object.keys(pts);
+      if (ids.length === 2 && start.pinch) {
+        lbZoom(start.scale * dist(pts[ids[0]], pts[ids[1]]) / start.pinch);
+      } else if (ids.length === 1 && LB.scale > 1 && start.ox !== undefined) {
+        LB.x = start.ox + (e.clientX - start.x); LB.y = start.oy + (e.clientY - start.y); lbApply();
+      }
+    });
+    function end(e) {
+      if (!pts[e.pointerId]) return;
+      var ids = Object.keys(pts);
+      if (ids.length === 1 && start && start.ox !== undefined && LB.scale <= 1.01) {
+        var dx = e.clientX - start.x, dy = e.clientY - start.y;
+        if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) && Date.now() - start.t < 600) lbShow(LB.i + (dx < 0 ? 1 : -1));
+      }
+      delete pts[e.pointerId];
+      start = Object.keys(pts).length ? start : null;
+    }
+    stage.addEventListener("pointerup", end);
+    stage.addEventListener("pointercancel", end);
+    img.addEventListener("dragstart", function (e) { e.preventDefault(); });
+  }
+  function wireThumbs(root, rows) {
+    root.querySelectorAll("button.thumb").forEach(function (b) {
+      if (b.dataset.wired) return;
+      b.dataset.wired = "1";
+      b.addEventListener("click", function () {
+        var r = rows[Number(b.getAttribute("data-row"))];
+        lbOpen(photoUrls(r), r && r.label, Number(b.getAttribute("data-ph")) || 0, b);
+      });
+    });
   }
 
   function render(o, code) {
@@ -384,6 +617,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
         '<span><span class="title">' + esc(r.label) + '</span><br><span class="when">' + esc(beforePacking(r.at, packed)) + " · " + esc(fmt(r.at)) + "</span></span>" +
         '<span class="act">' + (r.mediaType === "video" ? "View clip +" : "View evidence +") + "</span></button>" +
         (detailLine(r.details) ? '<div class="det">' + esc(detailLine(r.details)) + "</div>" : "") +
+        thumbsHtml(r, i, 4) +
         '<div class="media" hidden data-m="' + i + '"></div></div></li>';
     }).join("") +
       '<li><div class="rail"><span class="dot packed"></span></div><div class="entry">' +
@@ -438,13 +672,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
         var i = b.getAttribute("data-i");
         var box = app.querySelector('[data-m="' + i + '"]');
         var open = box.hidden;
-        if (open && !box.innerHTML) { box.innerHTML = mediaHtml(rows[i], o.demo, o.offline); wireStamps(box); }
+        if (open && !box.innerHTML) { box.innerHTML = mediaHtml(rows[i], o.demo, o.offline, i); wireStamps(box); wireThumbs(box, rows); }
         box.hidden = !open;
         b.setAttribute("aria-expanded", String(open));
         b.querySelector(".act").textContent = open ? "Hide evidence −" : (rows[i].mediaType === "video" ? "View clip +" : "View evidence +");
       });
     });
     wireStamps(app);
+    lbInit();
+    wireThumbs(app, rows);
     var printButton = document.getElementById("print-report");
     if (printButton) printButton.addEventListener("click", function () { window.print(); });
     var topButton = document.getElementById("back-top");
