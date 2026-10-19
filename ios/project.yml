@@ -1,0 +1,66 @@
+# XcodeGen project spec. GitHub's Mac builder runs `xcodegen generate` to create
+# KitchenLens.xcodeproj from this file, so no Xcode project file is kept in the repo.
+# On a Mac: `brew install xcodegen && cd ios && xcodegen generate && open KitchenLens.xcodeproj`
+name: KitchenLens
+options:
+  bundleIdPrefix: com.kitchenlens
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""            # filled in by the release workflow (APPLE_TEAM_ID)
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+
+packages:
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: "11.6.0"
+
+targets:
+  KitchenLens:
+    type: application
+    platform: iOS
+    scheme: {}                      # shared scheme so GitHub's builder can run xcodebuild
+    sources:
+      - path: KitchenLens
+    resources:
+      - path: KitchenLens/Resources
+        optional: true
+    dependencies:
+      - package: Firebase
+        product: FirebaseAuth
+      - package: Firebase
+        product: FirebaseFirestore
+      - package: Firebase
+        product: FirebaseStorage
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kitchenlens.app
+        PRODUCT_NAME: KitchenLens
+        TARGETED_DEVICE_FAMILY: "1"   # iPhone
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: KitchenLens/Info.plist
+    info:
+      path: KitchenLens/Info.plist
+      properties:
+        CFBundleDisplayName: KitchenLens
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIRequiredDeviceCapabilities: [arm64]
+        ITSAppUsesNonExemptEncryption: false
+        NSCameraUsageDescription: "KitchenLens uses the camera to record hygiene photos and short packing clips that customers see when they scan the order's QR seal."
+        NSMicrophoneUsageDescription: "The camera may ask for the microphone while recording; KitchenLens removes all sound from clips before saving them."
+        # Settings the app reads at run time (set by the GitHub workflow; edit for local builds)
+        KLScanBaseURL: "https://YOUR-PROJECT-ID.web.app/o/"
+        KLWebBaseURL: "https://YOUR-PROJECT-ID.web.app/"
+        KLSupportEmail: "support@example.com"

@@ -78,6 +78,13 @@ interface KitchenRepository {
 
     /** The same public record the customer page shows when the QR is scanned. */
     suspend fun getOrder(code: String): Map<String, Any?>?
+
+    /**
+     * Permanently deletes the signed-in account and all its data: kitchen profile,
+     * hygiene records, photos, clips, orders and seals (Google Play and App Store
+     * both require this). [password] re-confirms the user for cloud accounts.
+     */
+    suspend fun deleteAccount(password: String)
 }
 
 /** Thrown when a QR seal already exists for the same platform order number. */

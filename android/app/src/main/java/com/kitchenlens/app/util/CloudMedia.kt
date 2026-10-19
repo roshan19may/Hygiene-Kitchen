@@ -28,6 +28,11 @@ class CloudMedia(context: Context) {
     val preset: String get() = prefs.getString("preset", "").orEmpty()
     val isConfigured: Boolean get() = cloudName.isNotBlank() && preset.isNotBlank()
 
+    /** Forgets the cloud account and every uploaded-file record (account deletion). */
+    fun forgetAll() {
+        prefs.edit().clear().apply()
+    }
+
     fun saveSettings(cloudName: String, preset: String) {
         prefs.edit().putString("cloudName", cloudName.trim()).putString("preset", preset.trim()).apply()
     }

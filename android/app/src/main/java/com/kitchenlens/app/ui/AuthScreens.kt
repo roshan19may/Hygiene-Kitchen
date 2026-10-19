@@ -37,6 +37,13 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kitchenlens.app.data.LocalRepository
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.platform.LocalContext
+import com.kitchenlens.app.BuildConfig
 import com.kitchenlens.app.data.profileMap
 import com.kitchenlens.app.util.Gstin
 import kotlinx.coroutines.launch
@@ -239,6 +246,84 @@ fun EditKitchenScreen(vm: AppViewModel, onDone: () -> Unit, onBack: () -> Unit) 
                     }
                 },
             ) { Text(if (busy) "Saving…" else "Save changes") }
+
+            Spacer(Modifier.size(16.dp))
+            AccountSection(vm)
+            Spacer(Modifier.size(24.dp))
         }
+    }
+}
+
+/** Privacy policy link and permanent account deletion (required by Google Play and the App Store). */
+@Composable
+private fun AccountSection(vm: AppViewModel) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var confirm by remember { mutableStateOf(false) }
+    var password by remember { mutableStateOf("") }
+    var typed by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    Text("Account", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+    TextButton(onClick = {
+        runCatching {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.WEB_BASE_URL + "privacy.html")))
+        }
+    }) { Text("Privacy policy") }
+    OutlinedButton(
+        onClick = { confirm = true; error = null; password = ""; typed = "" },
+        modifier = Modifier.fillMaxWidth(),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = Chilli),
+    ) { Text("Delete my account and data") }
+
+    if (confirm) {
+        AlertDialog(
+            onDismissRequest = { if (!busy) confirm = false },
+            title = { Text("Delete account permanently?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "This deletes your kitchen profile, all hygiene records, photos, clips, orders and QR seals. " +
+                            "Seals already given to customers will stop working. This cannot be undone."
+                    )
+                    if (!vm.repo.isDemo) {
+                        OutlinedTextField(
+                            password, { password = it }, label = { Text("Your password") }, singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    OutlinedTextField(
+                        typed, { typed = it }, label = { Text("Type DELETE to confirm") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (vm.repo.isDemo) {
+                        Text(
+                            "Photos already uploaded to your own Cloudinary account must be deleted there.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    ErrorText(error)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !busy && typed.trim().equals("DELETE", ignoreCase = true) && (vm.repo.isDemo || password.isNotBlank()),
+                    onClick = {
+                        busy = true; error = null
+                        scope.launch {
+                            try {
+                                vm.deleteAccount(password)
+                            } catch (e: Exception) {
+                                error = "Could not delete: ${e.message}"
+                            } finally { busy = false }
+                        }
+                    },
+                ) { Text(if (busy) "Deleting…" else "Delete permanently", color = Chilli) }
+            },
+            dismissButton = { TextButton(onClick = { confirm = false }, enabled = !busy) { Text("Cancel") } },
+        )
     }
 }

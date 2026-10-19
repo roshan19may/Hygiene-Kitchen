@@ -1,16 +1,18 @@
 # KitchenLens — Food Safety & Hygiene Verification
 
 Hygiene transparency for cloud kitchens. Kitchen staff record hygiene proof in the
-Android app, and every delivery bag gets a QR seal. When the customer scans it, they
+Android or iPhone app, and every delivery bag gets a QR seal. When the customer scans it, they
 see the order's packing clip, the food temperature at packing, and the kitchen's
 hygiene records from before the order, without any recipe being shown.
 
 | Folder | What it is |
 |---|---|
-| `android/` | Kitchen app (Kotlin, Jetpack Compose) |
+| `android/` | Kitchen app for Android (Kotlin, Jetpack Compose) |
+| `ios/` | Kitchen app for iPhone (SwiftUI, iOS 16+); same features and same Firebase data |
+| `store/` | Ready-to-paste Google Play and App Store listing texts, data-safety and privacy answers |
 | `web/` | Customer scan page that the QR code opens |
 | `firebase/`, `firebase.json` | Database and storage security rules, hosting setup |
-| `.github/workflows/` | GitHub builds the APK and publishes the scan page automatically |
+| `.github/workflows/` | GitHub builds the Android APK / Play bundle, the iPhone app (and TestFlight upload), and publishes the scan page |
 
 ---
 
@@ -119,7 +121,7 @@ GST number (GSTIN, optional, format-checked). Customers see FSSAI and GSTIN on e
 
 **Per order (about 30 seconds):** tap **New order + QR seal**, choose the platform, enter the
 **platform order number** (required except for direct orders), the temperature shown on the probe
-(guideline: hot food at least 50°C, cold food 5°C or below; any reading can be saved), and record a
+(FSSAI guideline: hot food at 65°C or above, cold food 5°C or below; any reading can be saved), and record a
 5–20 s packing clip, then tap **Create QR seal**. Share the label image to a Bluetooth
 thermal-printer app (58 mm labels) and stick it across the bag opening.
 
@@ -139,7 +141,7 @@ thermal-printer app (58 mm labels) and stick it across the bag opening.
 - Only in-app camera capture; no gallery uploads, so old photos can't be reused.
 - Duplicate-photo detection compares each new photo with the kitchen's last 60.
 - On-device text recognition reads the date from supplier bills.
-- Temperature check: hot food at 60°C or above, cold food at 5°C or below.
+- Temperature check: hot food at 65°C or above (FSSAI guideline), cold food at 5°C or below; a warning only.
 - Hygiene score (0–100): five pillars of 20 points each (utensils, staff, pest control,
   perishable delivery, temperature), frozen at the moment of packing.
 - Clips are recorded **without sound**, so recipe discussions are never captured.
@@ -167,10 +169,83 @@ and prepare secret masalas in a separate room in coded containers.
     and full order numbers)
   - `orders/{code}` → public record the scan page reads, including a frozen `snapshot`
     of the kitchen's hygiene state at packing
-- Before Play Store release: create a signing key, check Google Play's current
-  target-SDK requirement, and add a privacy policy covering staff video under the DPDP Act.
+- Android targets API 36 (Google Play requirement from 31 August 2026), built with AGP 8.10 / Gradle 8.11.
+- iPhone: `ios/project.yml` is an XcodeGen spec. On a Mac: `brew install xcodegen && cd ios && xcodegen generate && open KitchenLens.xcodeproj`.
+  Demo mode is used when `GoogleService-Info.plist` is not in `ios/KitchenLens/Resources/`.
 
-## 5. Next steps (not built yet)
+## 5. Publish on Google Play (Android users)
+
+Do section 2 first: store users need the real Firebase backend, not demo mode.
+
+1. **Create the upload key (once, keep it safe; losing it blocks updates).** On any computer with Java:
+   ```
+   keytool -genkeypair -v -keystore kitchenlens-upload.jks -alias kitchenlens \
+     -keyalg RSA -keysize 2048 -validity 10000
+   base64 -w0 kitchenlens-upload.jks > keystore.txt      # macOS: base64 -i kitchenlens-upload.jks -o keystore.txt
+   ```
+2. **GitHub secrets** (Settings > Secrets and variables > Actions > Secrets):
+
+   | Secret | Value |
+   |---|---|
+   | `GOOGLE_SERVICES_JSON` | contents of `google-services.json` (section 2) |
+   | `KEYSTORE_BASE64` | contents of `keystore.txt` |
+   | `KEYSTORE_PASSWORD` | the keystore password |
+   | `KEY_ALIAS` | `kitchenlens` |
+   | `KEY_PASSWORD` | the key password |
+
+   **Variables** (same page, Variables tab): `SCAN_BASE_URL` = `https://<project-id>.web.app/o/`,
+   `WEB_BASE_URL` = `https://<project-id>.web.app/`, `SUPPORT_EMAIL` = your support email.
+3. Fill in `businessName`, `businessAddress` and `supportEmail` in `web/config.js` and run
+   `firebase deploy --only hosting`. Check that `<WEB_BASE_URL>privacy.html` and
+   `<WEB_BASE_URL>delete-account.html` open.
+4. Push any change (or **Actions > Build Android app > Run workflow**). Download the artifact
+   **KitchenLens-play-store-bundle** → `app-release.aab`. Each run gets a higher version code automatically.
+5. <https://play.google.com/console> → pay the one-time US$25 → **Create app**
+   (name "KitchenLens: Food Hygiene", App, Free). Fill the store listing, app content and data
+   safety form from [`store/google-play.md`](store/google-play.md).
+6. Upload the `.aab` to **Testing > Closed testing** (personal accounts: 12 testers for 14 days, then
+   apply for production). Organisation accounts can go straight to **Production**. Accept
+   **Play App Signing** when asked. Review usually takes 1–7 days.
+
+## 6. Publish on the Apple App Store (iPhone users)
+
+No Mac is needed: GitHub's Mac builder compiles, signs and uploads the app.
+
+1. **Apple Developer Program** (US$99 a year): <https://developer.apple.com/programs/enroll/>.
+   Enrol as an organisation (needs a D-U-N-S number) so your business name shows as the seller.
+2. **Firebase:** Project settings > Your apps > Add app > **iOS**, bundle ID `com.kitchenlens.app`.
+   Download `GoogleService-Info.plist`.
+3. **App Store Connect** (<https://appstoreconnect.apple.com>) > **Apps > + New App**: iOS, name
+   "KitchenLens: Food Hygiene", bundle ID `com.kitchenlens.app` (register it first under
+   developer.apple.com > Identifiers if it isn't listed), SKU `kitchenlens-ios-1`.
+4. **API key for GitHub:** App Store Connect > Users and Access > **Integrations > App Store Connect API** >
+   generate a key with **Admin** access (needed so the build can create its own signing certificate).
+   Download the `.p8` file (only once). Note the **Key ID** and **Issuer ID**.
+5. **GitHub secrets:**
+
+   | Secret | Value |
+   |---|---|
+   | `APPLE_TEAM_ID` | 10-character Team ID (developer.apple.com > Membership) |
+   | `ASC_KEY_ID` | the API Key ID |
+   | `ASC_ISSUER_ID` | the Issuer ID |
+   | `ASC_KEY_P8` | the whole text of the `.p8` file, including the BEGIN/END lines |
+   | `GOOGLE_SERVICE_INFO_PLIST` | the whole text of `GoogleService-Info.plist` |
+
+   The `SCAN_BASE_URL`, `WEB_BASE_URL` and `SUPPORT_EMAIL` variables from section 5 are used too.
+6. Run **Actions > Build iPhone app > Run workflow**. It compiles the app, then signs it and uploads
+   it to App Store Connect. Without the Apple secrets it only does the compile check.
+7. After 10–30 minutes the build appears under **TestFlight**. Install the **TestFlight** app on an iPhone
+   and test with your own Apple ID (internal testers need no review).
+8. In App Store Connect fill in the listing, App Privacy and App Review details from
+   [`store/apple-app-store.md`](store/apple-app-store.md), choose the build, and **Submit for Review**
+   (usually 1–3 days). Give the reviewer a working test kitchen login.
+
+**Updating later:** change the code and push. Both workflows build new versions with higher build
+numbers; upload the new `.aab` to Play, and pick the new build in App Store Connect. To change the
+version shown to users, edit `versionName` in `android/gradle.properties` and `MARKETING_VERSION`
+in `ios/project.yml`.
+
+## 7. Next steps (not built yet)
 
 1. **Bluetooth food probe:** fill the temperature field automatically so it can't be typed.
 2. **Upload queue:** retry uploads in the background when kitchen internet drops.

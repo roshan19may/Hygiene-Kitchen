@@ -1,6 +1,7 @@
 package com.kitchenlens.app.data
 
 import android.net.Uri
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
@@ -206,6 +207,44 @@ class FirebaseRepository : KitchenRepository {
             .limit(50)
             .get().await()
             .documents.map { orderSummaryFromMap(it.id, it.data ?: emptyMap()) }
+
+    override suspend fun deleteAccount(password: String) {
+        val user = auth.currentUser ?: error("Not signed in")
+        val email = user.email ?: error("This account has no email address")
+        // Confirm the password first, so a half-finished deletion cannot happen
+        user.reauthenticate(EmailAuthProvider.getCredential(email, password)).await()
+
+        val uid = user.uid
+        val kid = db.collection("users").document(uid).get().await().getString("kitchenId")
+        if (kid != null) {
+            val kitchenRef = db.collection("kitchens").document(kid)
+            // Hygiene records
+            deleteInBatches(kitchenRef.collection("logs").get().await().documents.map { it.reference })
+            // Orders and their order-number links
+            val orders = db.collection("orders").whereEqualTo("kitchenId", kid).get().await().documents
+            val refs = orders.mapNotNull { (it.getString("orderRefKey"))?.let { k -> db.collection("orderRefs").document(k) } }
+            deleteInBatches(refs + orders.map { it.reference })
+            // Photos and clips
+            deleteStorageFolder(storage.reference.child("kitchens/$kid"))
+            kitchenRef.delete().await()
+        }
+        db.collection("users").document(uid).delete().await()
+        user.delete().await()
+    }
+
+    private suspend fun deleteInBatches(refs: List<com.google.firebase.firestore.DocumentReference>) {
+        refs.chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { batch.delete(it) }
+            batch.commit().await()
+        }
+    }
+
+    private suspend fun deleteStorageFolder(folder: com.google.firebase.storage.StorageReference) {
+        val list = folder.listAll().await()
+        list.items.forEach { runCatching { it.delete().await() } }
+        list.prefixes.forEach { deleteStorageFolder(it) }
+    }
 
     override suspend fun getOrder(code: String): Map<String, Any?>? =
         db.collection("orders").document(code).get().await().data

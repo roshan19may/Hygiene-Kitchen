@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Delete KitchenLens Account</title>
+<meta name="description" content="How to delete a KitchenLens account and its data.">
+<style>
+:root { --bg: #f4f7f5; --surface: #ffffff; --ink: #172b24; --muted: #5d6f67; --line: #dce6e0; --brand: #176b4b; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0e1714; --surface: #15211d; --ink: #e7efeb; --muted: #9db0a8; --line: #2a3a34; --brand: #5cc7a4; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 "Segoe UI", system-ui, sans-serif;
+  padding: 24px max(16px, env(safe-area-inset-right, 0px)) 48px max(16px, env(safe-area-inset-left, 0px));
+}
+main { max-width: 720px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: clamp(18px, 4vw, 36px); }
+h1 { font-size: 1.6rem; line-height: 1.2; margin: 0 0 4px; }
+h2 { font-size: 1.08rem; margin: 24px 0 6px; }
+p, li { max-width: 66ch; }
+.muted { color: var(--muted); font-size: .9rem; }
+a { color: var(--brand); font-weight: 600; }
+.box { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-top: 8px; overflow-wrap: anywhere; }
+</style>
+<script src="config.js"></script>
+</head>
+<body>
+<main>
+  <h1>Delete your KitchenLens account</h1>
+  <p class="muted">KitchenLens — Food Safety &amp; Hygiene Verification, by <span data-cfg="businessName"></span></p>
+
+  <h2>Fastest: in the app</h2>
+  <ol>
+    <li>Open KitchenLens and sign in.</li>
+    <li>Tap the <strong>shop icon</strong> at the top of the Home screen (Kitchen details).</li>
+    <li>Scroll down and tap <strong>Delete my account and data</strong>.</li>
+    <li>Enter your password, type DELETE and confirm.</li>
+  </ol>
+  <p>Deletion is immediate and permanent.</p>
+
+  <h2>Without the app</h2>
+  <p>Email us from the address you signed up with, with the subject "Delete my KitchenLens account":</p>
+  <div class="box"><a data-cfg-mail href="#"><span data-cfg="supportEmail"></span></a></div>
+  <p>We confirm by email and complete the deletion within 30 days.</p>
+
+  <h2>What is deleted</h2>
+  <ul>
+    <li>Your sign-in account and kitchen profile (name, FSSAI and GST numbers).</li>
+    <li>All hygiene records, photos, video clips and supplier bill photos.</li>
+    <li>All orders and QR seals. Seals already given to customers stop working.</li>
+  </ul>
+  <h2>What may be kept</h2>
+  <p>Only records the law requires us to keep, for the period it requires. If you connected your own Cloudinary account, delete those files in Cloudinary.</p>
+  <p><a href="privacy.html">Privacy policy</a></p>
+</main>
+<script>
+(function () {
+  var c = window.KL_CONFIG || {};
+  document.querySelectorAll("[data-cfg]").forEach(function (el) {
+    var v = c[el.getAttribute("data-cfg")];
+    if (v) el.textContent = v;
+  });
+  document.querySelectorAll("[data-cfg-mail]").forEach(function (a) {
+    if (c.supportEmail) a.href = "mailto:" + c.supportEmail + "?subject=" + encodeURIComponent("Delete my KitchenLens account");
+  });
+})();
+</script>
+</body>
+</html>

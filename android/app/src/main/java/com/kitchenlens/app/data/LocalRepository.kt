@@ -224,6 +224,16 @@ class LocalRepository(context: Context) : KitchenRepository {
         updated
     }
 
+    override suspend fun deleteAccount(password: String) = withContext(Dispatchers.IO) {
+        // Demo mode keeps everything on this phone: remove it all.
+        dir.deleteRecursively()
+        dir.mkdirs(); mediaDir.mkdirs()
+        state.keys().asSequence().toList().forEach { state.remove(it) }
+        cloud.forgetAll()
+        save()
+        kitchenFlow.value = null
+    }
+
     override suspend fun findOrderCode(platform: String, orderRef: String): String? {
         if (orderRef.isBlank()) return null
         return state.optJSONObject("orderRefs")?.optString(orderRefKey(platform, orderRef))?.ifBlank { null }

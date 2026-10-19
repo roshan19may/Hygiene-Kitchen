@@ -103,6 +103,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun dismissUndo() { _lastReset.value = null }
 
+    /** Deletes the account and all its data, then returns to the sign-in screen. */
+    suspend fun deleteAccount(password: String) {
+        repo.deleteAccount(password)
+        kitchenJob?.cancel()
+        draftStore.clear()
+        _draft.value = null
+        _lastReset.value = null
+        _kitchen.value = null
+        runCatching { repo.signOut() }
+        _auth.value = AuthState.LoggedOut
+        _message.value = null
+    }
+
     private var kitchenJob: Job? = null
 
     init { refresh() }

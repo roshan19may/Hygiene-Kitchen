@@ -7,14 +7,16 @@ plugins {
 
 android {
     namespace = "com.kitchenlens.app"
-    compileSdk = 35
+    // Google Play requires target API 36 (Android 16) for new apps and updates from 31 Aug 2026
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.kitchenlens.app"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        targetSdk = 36
+        // Every Play upload needs a higher versionCode; GitHub passes its run number.
+        versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
+        versionName = (project.findProperty("versionName") as String?) ?: "1.0.0"
 
         // The address the QR code points to; the order code is added at the end.
         // GitHub builds pass -PscanBaseUrl=... automatically (see .github/workflows/android.yml).
@@ -22,12 +24,31 @@ android {
         val scanBaseUrl = (project.findProperty("scanBaseUrl") as String?)
             ?.takeIf { it.isNotBlank() } ?: "https://YOUR-PROJECT-ID.web.app/o/"
         buildConfigField("String", "SCAN_BASE_URL", "\"$scanBaseUrl\"")
-        // Shown on the customer page and in the app for help.
-        buildConfigField("String", "SUPPORT_EMAIL", "\"support@example.com\"")
+        // Shown in the app for help and account-deletion requests.
+        val supportEmail = (project.findProperty("supportEmail") as String?)?.takeIf { it.isNotBlank() } ?: "support@example.com"
+        buildConfigField("String", "SUPPORT_EMAIL", "\"$supportEmail\"")
+        // Where privacy.html and delete-account.html are published (same site as the scan page)
+        val webBaseUrl = (project.findProperty("webBaseUrl") as String?)?.takeIf { it.isNotBlank() } ?: "https://YOUR-PROJECT-ID.web.app/"
+        buildConfigField("String", "WEB_BASE_URL", "\"$webBaseUrl\"")
+    }
+
+    // Release signing for Google Play. Values come from GitHub secrets (see README,
+    // "Publish on Google Play"); without them the release build is left unsigned.
+    val keystoreFile = System.getenv("KL_KEYSTORE_FILE")?.let { file(it) }
+    signingConfigs {
+        if (keystoreFile != null && keystoreFile.exists()) {
+            create("release") {
+                storeFile = keystoreFile
+                storePassword = System.getenv("KL_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KL_KEY_ALIAS")
+                keyPassword = System.getenv("KL_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }

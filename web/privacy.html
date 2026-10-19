@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KitchenLens Privacy Policy</title>
+<meta name="description" content="How KitchenLens — Food Safety & Hygiene Verification collects, uses and deletes data.">
+<style>
+:root {
+  --bg: #f4f7f5; --surface: #ffffff; --ink: #172b24; --muted: #5d6f67; --line: #dce6e0; --brand: #176b4b;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0e1714; --surface: #15211d; --ink: #e7efeb; --muted: #9db0a8; --line: #2a3a34; --brand: #5cc7a4; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 "Segoe UI", system-ui, sans-serif;
+  padding: 24px max(16px, env(safe-area-inset-right, 0px)) 48px max(16px, env(safe-area-inset-left, 0px));
+}
+main { max-width: 760px; margin: 0 auto; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: clamp(18px, 4vw, 36px); }
+h1 { font-size: 1.7rem; line-height: 1.2; margin: 0 0 4px; }
+h2 { font-size: 1.1rem; margin: 28px 0 6px; }
+p, li { max-width: 68ch; }
+.muted { color: var(--muted); font-size: .9rem; }
+a { color: var(--brand); font-weight: 600; }
+table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+th, td { text-align: left; vertical-align: top; padding: 8px; border-top: 1px solid var(--line); }
+.tablewrap { overflow-x: auto; }
+</style>
+<script src="config.js"></script>
+</head>
+<body>
+<main>
+  <h1>Privacy Policy</h1>
+  <p class="muted">KitchenLens — Food Safety &amp; Hygiene Verification · Last updated <span data-cfg="policyUpdated"></span></p>
+
+  <p>KitchenLens is operated by <strong data-cfg="businessName"></strong>, <span data-cfg="businessAddress"></span> ("we"). KitchenLens helps cloud kitchens and restaurants record their hygiene process and share it with customers through a QR seal on each delivery bag. This policy explains what data the KitchenLens apps (Android and iPhone) and the QR report page handle, why, and how you can delete it.</p>
+
+  <h2>Who uses KitchenLens</h2>
+  <p>The apps are for kitchen businesses and their staff (aged 18 or over). Customers who scan a QR seal do not need an account and do not give us any personal information.</p>
+
+  <h2>Data we collect</h2>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Data</th><th>Why</th><th>Who can see it</th></tr>
+    <tr><td>Kitchen account: email address and password (stored securely by Google Firebase Authentication)</td><td>Sign-in</td><td>Only the kitchen</td></tr>
+    <tr><td>Kitchen profile: business name, locality, city, FSSAI number, GST number, kitchen size</td><td>Shown on the customer report</td><td>Anyone with that kitchen's seal link</td></tr>
+    <tr><td>Hygiene photos and short video clips (no sound) of food arrival, utensil cleaning, staff hygiene, pest control and order packing, with date and time</td><td>Hygiene proof for customers</td><td>Anyone with the seal link for an order packed after the record was made</td></tr>
+    <tr><td>Supplier bill photos and supplier GST numbers</td><td>Kitchen's own records; only the bill date is shown to customers</td><td>Only the kitchen</td></tr>
+    <tr><td>Order details: delivery platform, platform order number, first name of the packer, food temperature, hygiene score</td><td>Linking the seal to the order</td><td>Anyone with the seal link (the order number is shown masked)</td></tr>
+    <tr><td>Staff names typed in the app</td><td>Who recorded each step</td><td>Only the kitchen; customers see the packer's first name</td></tr>
+  </table>
+  </div>
+  <p>The apps use the phone camera only when staff tap a record button. Clips are recorded without audio. We do not use advertising, advertising IDs, contact lists or location tracking, and we do not sell data.</p>
+
+  <h2>Staff in photos and clips</h2>
+  <p>Kitchen staff may appear in hygiene clips. The kitchen business is responsible for informing its staff and obtaining their consent before recording, as required by India's Digital Personal Data Protection Act, 2023.</p>
+
+  <h2>Where data is stored</h2>
+  <ul>
+    <li><strong>Google Firebase</strong> (Google Cloud, Mumbai region): accounts, records, photos and clips.</li>
+    <li><strong>Cloudinary</strong>: only when a kitchen connects its own Cloudinary account in the app, photos and clips are stored in that account.</li>
+    <li><strong>Phone storage</strong>: drafts and, in demo mode, all records stay on the phone.</li>
+    <li>The QR report page is hosted on GitHub Pages or Firebase Hosting, which keep standard access logs.</li>
+  </ul>
+
+  <h2>How long we keep data</h2>
+  <p>Data is kept while the kitchen account is active. A kitchen can delete its account at any time, which deletes its profile, records, photos, clips, orders and seals within 30 days, except where the law requires us to keep something.</p>
+
+  <h2>Deleting your account and data</h2>
+  <p>In the app: <strong>Kitchen details (shop icon) → Delete my account and data</strong>. Without the app, use the <a href="delete-account.html">account deletion request page</a>.</p>
+
+  <h2>Your rights</h2>
+  <p>You can ask to see, correct or delete your personal data, or withdraw consent, by writing to us. We reply within 30 days.</p>
+
+  <h2>Security</h2>
+  <p>Data travels over encrypted connections. Access rules allow each kitchen to change only its own records, and hygiene records cannot be edited after saving.</p>
+
+  <h2>Contact and grievances</h2>
+  <p>Email <a data-cfg-mail href="#"><span data-cfg="supportEmail"></span></a> or write to <span data-cfg="businessName"></span>, <span data-cfg="businessAddress"></span>.</p>
+
+  <h2>Changes</h2>
+  <p>We will update this page and its date when this policy changes.</p>
+</main>
+<script>
+(function () {
+  var c = window.KL_CONFIG || {};
+  document.querySelectorAll("[data-cfg]").forEach(function (el) {
+    var v = c[el.getAttribute("data-cfg")];
+    if (v) el.textContent = v;
+  });
+  document.querySelectorAll("[data-cfg-mail]").forEach(function (a) {
+    if (c.supportEmail) a.href = "mailto:" + c.supportEmail;
+  });
+})();
+</script>
+</body>
+</html>

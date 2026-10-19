@@ -12,7 +12,9 @@ service cloud.firestore {
       allow read: if signedIn() && request.auth.uid == uid;
       allow create: if signedIn() && request.auth.uid == uid
         && getAfter(/databases/$(database)/documents/kitchens/$(request.resource.data.kitchenId)).data.ownerUid == request.auth.uid;
-      allow update, delete: if false;
+      allow update: if false;
+      // Account deletion (store requirement): the owner removes their own link last.
+      allow delete: if signedIn() && request.auth.uid == uid;
     }
 
     match /kitchens/{kid} {
@@ -20,11 +22,14 @@ service cloud.firestore {
       allow read: if signedIn() && myKitchen() == kid;
       allow update: if signedIn() && myKitchen() == kid
         && request.resource.data.ownerUid == resource.data.ownerUid;
+      allow delete: if signedIn() && myKitchen() == kid;
 
-      // Hygiene records can be added but never edited or deleted (tamper-proof history).
+      // Hygiene records can be added but never edited (tamper-proof history).
+      // Only the owner can delete them, when deleting the whole account.
       match /logs/{logId} {
         allow read, create: if signedIn() && myKitchen() == kid;
-        allow update, delete: if false;
+        allow update: if false;
+        allow delete: if signedIn() && myKitchen() == kid;
       }
     }
 
@@ -33,7 +38,8 @@ service cloud.firestore {
     match /orderRefs/{key} {
       allow get: if true;
       allow create: if signedIn() && request.resource.data.kitchenId == myKitchen();
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.kitchenId == myKitchen(); // account deletion only
     }
 
     // Public order records: anyone with the exact code can open one (the QR scan),
@@ -42,7 +48,8 @@ service cloud.firestore {
       allow get: if true;
       allow list: if signedIn() && resource.data.kitchenId == myKitchen();
       allow create: if signedIn() && request.resource.data.kitchenId == myKitchen();
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.kitchenId == myKitchen(); // account deletion only
     }
   }
 }
