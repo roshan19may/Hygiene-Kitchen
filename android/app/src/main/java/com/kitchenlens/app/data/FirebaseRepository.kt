@@ -45,6 +45,10 @@ class FirebaseRepository : KitchenRepository {
         auth.signInWithEmailAndPassword(email.trim(), password).await()
     }
 
+    override suspend fun sendPasswordReset(email: String) {
+        auth.sendPasswordResetEmail(email.trim()).await()
+    }
+
     override suspend fun signUp(email: String, password: String) {
         auth.createUserWithEmailAndPassword(email.trim(), password).await()
     }

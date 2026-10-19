@@ -8,6 +8,8 @@ protocol KitchenRepository: AnyObject {
     func signedInUserId() -> String?
     func signIn(email: String, password: String) async throws
     func signUp(email: String, password: String) async throws
+    /// Emails a password-reset link (live mode only).
+    func sendPasswordReset(email: String) async throws
     func signOut()
 
     func loadKitchenId() async throws -> String?
@@ -95,6 +97,7 @@ final class LocalRepository: KitchenRepository {
         save()
     }
     func signUp(email: String, password: String) async throws { try await signIn(email: email, password: password) }
+    func sendPasswordReset(email: String) async throws {}   // demo mode has no passwords
     func signOut() { state.removeValue(forKey: "user"); save() }
 
     private var kitchenMap: [String: Any] {

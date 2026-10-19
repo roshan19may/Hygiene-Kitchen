@@ -17,6 +17,8 @@ interface KitchenRepository {
     fun signedInUserId(): String?
     suspend fun signIn(email: String, password: String)
     suspend fun signUp(email: String, password: String)
+    /** Emails a password-reset link (live mode; demo mode has no passwords to reset). */
+    suspend fun sendPasswordReset(email: String) {}
     fun signOut()
 
     /** Kitchen linked to the signed-in account, or null if setup is pending. */

@@ -1,24 +1,63 @@
 import SwiftUI
 
+/// Turns sign-in / sign-up errors into plain words (Firebase Auth error codes, stable across SDK versions).
+func friendlyAuthError(_ error: Error) -> String {
+    let e = error as NSError
+    guard e.domain == "FIRAuthErrorDomain" else { return error.localizedDescription }
+    switch e.code {
+    case 17007: return "An account with this email already exists. Go back and sign in instead."
+    case 17026: return "Password is too weak. Use at least 6 characters, mixing letters and numbers."
+    case 17008: return "That email address doesn't look right."
+    case 17009, 17011, 17004: return "Email or password is incorrect. New here? Tap \"Create an account\"."
+    case 17010: return "Too many attempts. Please wait a few minutes and try again."
+    case 17020: return "No internet connection. Check your connection and try again."
+    case 17006: return "Email sign-up is switched off for this app. Owner: Firebase console → Authentication → Sign-in method → enable Email/Password."
+    default: return error.localizedDescription
+    }
+}
+
+func isValidEmail(_ s: String) -> Bool {
+    s.trimmingCharacters(in: .whitespaces).range(of: #"^[^@\s]+@[^@\s]+\.[^@\s]+$"#, options: .regularExpression) != nil
+}
+
 struct LoginView: View {
+    @State private var creating = false
+    var body: some View {
+        if creating { CreateAccountView(onBack: { creating = false }) }
+        else { SignInView(onCreate: { creating = true }) }
+    }
+}
+
+struct SignInView: View {
     @EnvironmentObject var model: AppModel
+    let onCreate: () -> Void
     @State private var email = ""
     @State private var password = ""
     @State private var busy = false
     @State private var error: String?
+    @State private var info: String?
 
-    private func go(_ signUp: Bool) {
-        error = nil
-        guard email.contains("@"), password.count >= 6 else {
-            error = "Enter a valid email and a password of at least 6 characters"; return
+    private func signIn() {
+        error = nil; info = nil
+        guard isValidEmail(email) else { error = "Enter your kitchen email address"; return }
+        guard !password.isEmpty else { error = "Enter your password"; return }
+        busy = true
+        Task {
+            do { try await model.repo.signIn(email: email.trimmingCharacters(in: .whitespaces), password: password); await model.refresh() }
+            catch { self.error = friendlyAuthError(error) }
+            busy = false
         }
+    }
+
+    private func forgot() {
+        error = nil; info = nil
+        guard isValidEmail(email) else { error = "Type your email above first, then tap \"Forgot password?\""; return }
         busy = true
         Task {
             do {
-                if signUp { try await model.repo.signUp(email: email, password: password) }
-                else { try await model.repo.signIn(email: email, password: password) }
-                await model.refresh()
-            } catch { self.error = error.localizedDescription }
+                try await model.repo.sendPasswordReset(email: email.trimmingCharacters(in: .whitespaces))
+                info = "Password reset link sent to \(email). Check your inbox (and spam)."
+            } catch { self.error = friendlyAuthError(error) }
             busy = false
         }
     }
@@ -31,17 +70,97 @@ struct LoginView: View {
                 Text("Food Safety & Hygiene Verification").font(.title3.weight(.semibold))
                 Text("Show customers how their food was prepared, without revealing your recipes.")
                 if model.repo.isDemo { DemoBanner() }
+                Text("Sign in").font(.title2.bold())
                 TextField("Kitchen email", text: $email)
-                    .keyboardType(.emailAddress).textContentType(.username).autocapitalization(.none)
+                    .keyboardType(.emailAddress).textContentType(.username)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
                     .textFieldStyle(.roundedBorder)
                 SecureField("Password", text: $password).textContentType(.password).textFieldStyle(.roundedBorder)
                 ErrorText(text: error)
-                Button { go(false) } label: { Text(busy ? "Please wait…" : "Sign in").frame(maxWidth: .infinity) }
+                if let info { Text(info).font(.footnote).foregroundColor(Brand.ok) }
+                Button { signIn() } label: { Text(busy ? "Please wait…" : "Sign in").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6) }
                     .buttonStyle(.borderedProminent).disabled(busy)
-                Button("New kitchen? Create an account") { go(true) }.frame(maxWidth: .infinity).disabled(busy)
-                Button("Reset") { email = ""; password = ""; error = nil }.frame(maxWidth: .infinity).disabled(busy)
+                if !model.repo.isDemo {
+                    Button("Forgot password?") { forgot() }.disabled(busy)
+                }
+                Divider().padding(.vertical, 6)
+                Text("New kitchen?").font(.subheadline)
+                Button { onCreate() } label: { Text("Create an account").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6) }
+                    .buttonStyle(.bordered).disabled(busy)
             }
             .padding(24)
+        }
+    }
+}
+
+/// Simple sign-up: name, email, password twice, agree to the privacy policy.
+struct CreateAccountView: View {
+    @EnvironmentObject var model: AppModel
+    let onBack: () -> Void
+    @State private var name = ""
+    @State private var email = ""
+    @State private var password = ""
+    @State private var confirm = ""
+    @State private var agreed = false
+    @State private var busy = false
+    @State private var error: String?
+    @State private var showPrivacy = false
+
+    private func create() {
+        error = nil
+        if name.trimmingCharacters(in: .whitespaces).isEmpty { error = "Enter your name"; return }
+        if !isValidEmail(email) { error = "Enter a valid email address, e.g. owner@mykitchen.in"; return }
+        if password.count < 6 { error = "Password must be at least 6 characters"; return }
+        if password != confirm { error = "The two passwords don't match"; return }
+        if !agreed { error = "Please agree to the privacy policy to continue"; return }
+        busy = true
+        Task {
+            do {
+                try await model.repo.signUp(email: email.trimmingCharacters(in: .whitespaces), password: password)
+                model.lastPackerName = name.trimmingCharacters(in: .whitespaces)   // pre-fills "Recorded by"
+                await model.refresh()                                              // goes on to "Set up your kitchen"
+            } catch { self.error = friendlyAuthError(error) }
+            busy = false
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Button("‹ Back to sign in") { onBack() }.disabled(busy)
+                Text("Create your account").font(.title2.bold())
+                Text("One account per kitchen. Next you'll add your kitchen's name, FSSAI number and address.").font(.subheadline)
+                if model.repo.isDemo { DemoBanner() }
+                TextField("Your name", text: $name).textContentType(.name).textFieldStyle(.roundedBorder)
+                VStack(alignment: .leading, spacing: 4) {
+                    TextField("Kitchen email", text: $email)
+                        .keyboardType(.emailAddress).textContentType(.username)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        .textFieldStyle(.roundedBorder)
+                    Text("You'll sign in with this email").font(.caption).foregroundColor(.secondary)
+                }
+                SecureField("Password (at least 6 characters)", text: $password).textContentType(.newPassword).textFieldStyle(.roundedBorder)
+                VStack(alignment: .leading, spacing: 4) {
+                    SecureField("Confirm password", text: $confirm).textContentType(.newPassword).textFieldStyle(.roundedBorder)
+                    if !confirm.isEmpty && confirm != password {
+                        Text("Passwords don't match").font(.caption).foregroundColor(Brand.chilli)
+                    }
+                }
+                HStack(spacing: 4) {
+                    Toggle("", isOn: $agreed).toggleStyle(CheckboxStyle()).frame(width: 30)
+                    Text("I agree to the")
+                    Button("privacy policy") { showPrivacy = true }
+                }
+                .font(.subheadline)
+                ErrorText(text: error)
+                Button { create() } label: { Text(busy ? "Creating account…" : "Create account").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6) }
+                    .buttonStyle(.borderedProminent).disabled(busy)
+                Button("Already have an account? Sign in") { onBack() }.frame(maxWidth: .infinity).disabled(busy)
+            }
+            .padding(24)
+        }
+        .sheet(isPresented: $showPrivacy) {
+            if let u = URL(string: AppConfig.webBaseURL + "privacy.html") { SafariView(url: u).ignoresSafeArea() }
         }
     }
 }
@@ -140,28 +259,54 @@ func kitchenPageURL(_ model: AppModel, _ k: Kitchen) -> String {
     return base + "&d=" + OfflineSeal.kitchenPayload(pub)
 }
 
-/// Badge with the kitchen's 30-day rating, to share on listings and social media.
+/// "Share your hygiene rating": star rating, a small preview of the badge picture,
+/// two short lines of explanation and one Share button.
 struct KitchenBadgeCard: View {
     @EnvironmentObject var model: AppModel
     let kitchen: Kitchen
     @State private var share: UIImage?
     @State private var web: URL?
 
+    private var badge: UIImage {
+        let st = model.kitchenStats
+        let eligible = st?.eligible ?? false
+        return QrLabel.badge(url: kitchenPageURL(model, kitchen), kitchenName: kitchen.name,
+                             headline: eligible ? "\(String(format: "%.1f", st!.stars)) ★  \(st!.rating)" : "New on KitchenLens",
+                             detail: eligible ? "\(st!.orders) sealed orders · last 30 days" : "Every order sealed with hygiene proof")
+    }
+
     var body: some View {
+        let image = badge
         Card(tint: Brand.leafLight) {
-            Text("Your kitchen hygiene badge").font(.headline)
-            Text(model.kitchenStats?.summary() ?? "Calculating your 30-day rating…").font(.subheadline)
-            Text("Post this badge on your Swiggy and Zomato menu photos, Instagram and Google listing. Its QR opens your kitchen page with your live rating.")
-                .font(.caption)
-            Button {
-                guard let st = model.kitchenStats else { return }
-                share = QrLabel.badge(url: kitchenPageURL(model, kitchen), kitchenName: kitchen.name,
-                                      headline: st.eligible ? "\(String(format: "%.1f", st.stars)) ★  \(st.rating)" : "New on KitchenLens",
-                                      detail: st.eligible ? "\(st.orders) sealed orders · last 30 days" : "Every order sealed with hygiene proof")
-            } label: { Text("Share hygiene badge").frame(maxWidth: .infinity) }
-                .buttonStyle(.borderedProminent).disabled(model.kitchenStats == nil)
-            Button { web = URL(string: kitchenPageURL(model, kitchen)) } label: { Text("Open my kitchen page").frame(maxWidth: .infinity) }
-                .buttonStyle(.bordered)
+            Text("Share your hygiene rating").font(.headline)
+            HStack(spacing: 14) {
+                // Small preview of the exact picture that will be shared
+                Image(uiImage: image).resizable().scaledToFit().frame(width: 96)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .accessibilityLabel("Your hygiene badge")
+                VStack(alignment: .leading, spacing: 4) {
+                    if let st = model.kitchenStats {
+                        if st.eligible {
+                            Text("★ \(String(format: "%.1f", st.stars))").font(.title.bold()).foregroundColor(Brand.leaf)
+                            Text(st.rating).font(.subheadline.weight(.semibold))
+                            Text("From your last \(st.orders) orders").font(.caption)
+                        } else {
+                            let left = KitchenStats.minOrders - st.orders
+                            Text("Rating coming soon").font(.subheadline.bold())
+                            Text("Pack \(left) more order\(left == 1 ? "" : "s") with a QR seal to get your stars.").font(.caption)
+                            ProgressView(value: Double(st.orders), total: Double(KitchenStats.minOrders))
+                        }
+                    } else {
+                        Text("Working out your rating…").font(.subheadline)
+                    }
+                }
+            }
+            Text("This picture shows your star rating and a QR code. Post it on WhatsApp, Instagram or your Swiggy/Zomato photos. Customers scan it to see how clean your kitchen is.")
+                .font(.subheadline)
+            Button { share = image } label: { Text("Share badge").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 4) }
+                .buttonStyle(.borderedProminent)
+            Button("See what customers see") { web = URL(string: kitchenPageURL(model, kitchen)) }
+                .frame(maxWidth: .infinity)
         }
         .sheet(isPresented: Binding(get: { share != nil }, set: { if !$0 { share = nil } })) {
             if let img = share { ShareSheet(items: [img]) }

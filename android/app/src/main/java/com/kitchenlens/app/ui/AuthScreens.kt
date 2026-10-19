@@ -1,6 +1,19 @@
 package com.kitchenlens.app.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import com.kitchenlens.app.util.KitchenStats
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.Checkbox
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -66,23 +79,65 @@ fun DemoBanner() {
     }
 }
 
+/** Turns sign-in / sign-up errors into plain words (Firebase codes are not user friendly). */
+fun friendlyAuthError(e: Throwable): String {
+    if (e is com.google.firebase.FirebaseNetworkException) return "No internet connection. Check your connection and try again."
+    val code = (e as? com.google.firebase.auth.FirebaseAuthException)?.errorCode.orEmpty()
+    val msg = e.message.orEmpty()
+    return when {
+        code == "ERROR_EMAIL_ALREADY_IN_USE" -> "An account with this email already exists. Go back and sign in instead."
+        code == "ERROR_WEAK_PASSWORD" -> "Password is too weak. Use at least 6 characters, mixing letters and numbers."
+        code == "ERROR_INVALID_EMAIL" -> "That email address doesn't look right."
+        code == "ERROR_WRONG_PASSWORD" || code == "ERROR_INVALID_CREDENTIAL" || code == "ERROR_USER_NOT_FOUND" ->
+            "Email or password is incorrect. New here? Tap \"Create an account\"."
+        code == "ERROR_TOO_MANY_REQUESTS" -> "Too many attempts. Please wait a few minutes and try again."
+        code == "ERROR_OPERATION_NOT_ALLOWED" || msg.contains("CONFIGURATION_NOT_FOUND") ->
+            "Email sign-up is switched off for this app. Owner: Firebase console → Authentication → Sign-in method → enable Email/Password."
+        else -> msg.ifBlank { "Something went wrong. Please try again." }
+    }
+}
+
+private fun validEmail(e: String) = Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$").matches(e.trim())
+
 @Composable
 fun LoginScreen(vm: AppViewModel) {
+    var creating by rememberSaveable { mutableStateOf(false) }
+    if (creating) CreateAccountScreen(vm, onBack = { creating = false })
+    else SignInScreen(vm, onCreate = { creating = true })
+}
+
+@Composable
+private fun SignInScreen(vm: AppViewModel, onCreate: () -> Unit) {
     val scope = rememberCoroutineScope()
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var showPassword by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var info by remember { mutableStateOf<String?>(null) }
 
-    fun go(block: suspend () -> Unit) {
-        error = null
-        if (!email.contains("@") || password.length < 6) {
-            error = "Enter a valid email and a password of at least 6 characters"
-            return
+    fun signIn() {
+        error = null; info = null
+        when {
+            !validEmail(email) -> { error = "Enter your kitchen email address"; return }
+            password.isEmpty() -> { error = "Enter your password"; return }
         }
         busy = true
         scope.launch {
-            try { block(); vm.refresh() } catch (e: Exception) { error = e.message } finally { busy = false }
+            try { vm.repo.signIn(email.trim(), password); vm.refresh() }
+            catch (e: Exception) { error = friendlyAuthError(e) }
+            finally { busy = false }
+        }
+    }
+
+    fun forgot() {
+        error = null; info = null
+        if (!validEmail(email)) { error = "Type your email above first, then tap \"Forgot password?\""; return }
+        busy = true
+        scope.launch {
+            try { vm.repo.sendPasswordReset(email.trim()); info = "Password reset link sent to ${email.trim()}. Check your inbox (and spam)." }
+            catch (e: Exception) { error = friendlyAuthError(e) }
+            finally { busy = false }
         }
     }
 
@@ -95,25 +150,116 @@ fun LoginScreen(vm: AppViewModel) {
         Text("Food Safety & Hygiene Verification", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text("Show customers how their food was prepared, without revealing your recipes.")
         if (vm.repo.isDemo) DemoBanner()
+        Text("Sign in", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         OutlinedTextField(
-            value = email, onValueChange = { email = it }, label = { Text("Kitchen email") },
+            value = email, onValueChange = { email = it.trim() }, label = { Text("Kitchen email") },
             singleLine = true, modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
         )
         OutlinedTextField(
             value = password, onValueChange = { password = it }, label = { Text("Password") },
             singleLine = true, modifier = Modifier.fillMaxWidth(),
-            visualTransformation = PasswordVisualTransformation(),
+            visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            trailingIcon = { TextButton(onClick = { showPassword = !showPassword }) { Text(if (showPassword) "Hide" else "Show") } },
         )
         ErrorText(error)
-        TextButton(onClick = { email = ""; password = ""; error = null }, enabled = !busy) { Text("Reset") }
-        Button(onClick = { go { vm.repo.signIn(email, password) } }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+        info?.let { Text(it, color = Ok, style = MaterialTheme.typography.bodySmall) }
+        Button(onClick = { signIn() }, enabled = !busy, modifier = Modifier.fillMaxWidth().height(52.dp)) {
             Text(if (busy) "Please wait…" else "Sign in")
         }
-        TextButton(onClick = { go { vm.repo.signUp(email, password) } }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-            Text("New kitchen? Create an account")
+        TextButton(onClick = { forgot() }, enabled = !busy && !vm.repo.isDemo) { Text("Forgot password?") }
+        Spacer(Modifier.size(8.dp))
+        Text("New kitchen?", style = MaterialTheme.typography.bodyMedium)
+        OutlinedButton(onClick = onCreate, enabled = !busy, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+            Text("Create an account", fontWeight = FontWeight.Bold)
         }
+    }
+}
+
+/** Simple sign-up: name, email, password twice, agree to the privacy policy. */
+@Composable
+private fun CreateAccountScreen(vm: AppViewModel, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var name by rememberSaveable { mutableStateOf("") }
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    var showPassword by remember { mutableStateOf(false) }
+    var agreed by rememberSaveable { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    BackHandler(enabled = !busy) { onBack() }
+
+    fun create() {
+        error = when {
+            name.isBlank() -> "Enter your name"
+            !validEmail(email) -> "Enter a valid email address, e.g. owner@mykitchen.in"
+            password.length < 6 -> "Password must be at least 6 characters"
+            password != confirm -> "The two passwords don't match"
+            !agreed -> "Please agree to the privacy policy to continue"
+            else -> null
+        }
+        if (error != null) return
+        busy = true
+        scope.launch {
+            try {
+                vm.repo.signUp(email.trim(), password)
+                vm.lastPackerName = name.trim()   // pre-fills "Recorded by" on the hygiene screens
+                vm.refresh()                      // goes on to "Set up your kitchen"
+            } catch (e: Exception) {
+                error = friendlyAuthError(e)
+            } finally { busy = false }
+        }
+    }
+
+    Column(
+        Modifier.fillMaxSize().systemBarsPadding().imePadding().padding(24.dp).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        TextButton(onClick = onBack, enabled = !busy) { Text("‹ Back to sign in") }
+        Text("Create your account", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(
+            "One account per kitchen. Next you'll add your kitchen's name, FSSAI number and address.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        if (vm.repo.isDemo) DemoBanner()
+        OutlinedTextField(
+            name, { name = it }, label = { Text("Your name") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+        )
+        OutlinedTextField(
+            email, { email = it.trim() }, label = { Text("Kitchen email") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+            supportingText = { Text("You'll sign in with this email") },
+        )
+        OutlinedTextField(
+            password, { password = it }, label = { Text("Password (at least 6 characters)") }, singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            trailingIcon = { TextButton(onClick = { showPassword = !showPassword }) { Text(if (showPassword) "Hide" else "Show") } },
+        )
+        OutlinedTextField(
+            confirm, { confirm = it }, label = { Text("Confirm password") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            isError = confirm.isNotEmpty() && confirm != password,
+            supportingText = { if (confirm.isNotEmpty() && confirm != password) Text("Passwords don't match") },
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = agreed, onCheckedChange = { agreed = it })
+            Text("I agree to the ", style = MaterialTheme.typography.bodyMedium)
+            TextButton(onClick = {
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.WEB_BASE_URL + "privacy.html"))) }
+            }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) { Text("privacy policy") }
+        }
+        ErrorText(error)
+        Button(onClick = { create() }, enabled = !busy, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+            Text(if (busy) "Creating account…" else "Create account", fontWeight = FontWeight.Bold)
+        }
+        TextButton(onClick = onBack, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Already have an account? Sign in") }
     }
 }
 
@@ -223,36 +369,69 @@ fun kitchenPageUrl(vm: AppViewModel, k: Kitchen): String {
     return base + "&d=" + OfflineSeal.kitchenPayload(pub)
 }
 
-/** Badge with the kitchen's 30-day rating, to share on listings and social media. */
+/** Headline and detail line printed on the badge picture. */
+private fun badgeLines(st: KitchenStats?): Pair<String, String> =
+    if (st != null && st.eligible) "${st.stars} ★  ${st.rating}" to "${st.orders} sealed orders · last 30 days"
+    else "New on KitchenLens" to "Every order sealed with hygiene proof"
+
+/**
+ * "Share your hygiene rating": shows the kitchen's star rating, a small preview of the
+ * badge picture, two short lines of explanation and one Share button.
+ */
 @Composable
 private fun KitchenBadgeCard(vm: AppViewModel, k: Kitchen) {
     val context = LocalContext.current
     val stats by vm.kitchenStats.collectAsStateWithLifecycle()
+    val st = stats
+    val url = remember(k, st) { kitchenPageUrl(vm, k) }
+    val badge = remember(url, k.name, st) {
+        val (headline, detail) = badgeLines(st)
+        QrLabel.badgeBitmap(url, k.name, headline, detail)
+    }
     Card(colors = CardDefaults.cardColors(containerColor = LeafLight)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Your kitchen hygiene badge", fontWeight = FontWeight.Bold)
-            val s = stats
-            Text(s?.summary() ?: "Calculating your 30-day rating…", style = MaterialTheme.typography.bodyMedium)
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Share your hygiene rating", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                // Small preview of the exact picture that will be shared
+                androidx.compose.foundation.Image(
+                    bitmap = badge.asImageBitmap(), contentDescription = "Your hygiene badge",
+                    modifier = Modifier.width(96.dp).clip(RoundedCornerShape(8.dp)),
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    when {
+                        st == null -> Text("Working out your rating…")
+                        st.eligible -> {
+                            Text("★ ${st.stars}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Leaf)
+                            Text(st.rating, fontWeight = FontWeight.SemiBold)
+                            Text("From your last ${st.orders} orders", style = MaterialTheme.typography.bodySmall)
+                        }
+                        else -> {
+                            Text("Rating coming soon", fontWeight = FontWeight.Bold)
+                            Text(
+                                "Pack ${KitchenStats.MIN_ORDERS - st.orders} more order${if (KitchenStats.MIN_ORDERS - st.orders == 1) "" else "s"} with a QR seal to get your stars.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            LinearProgressIndicator(
+                                progress = { st.orders / KitchenStats.MIN_ORDERS.toFloat() },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
+            }
             Text(
-                "Post this badge on your Swiggy and Zomato menu photos, Instagram and Google listing. " +
-                    "Its QR opens your kitchen page with your live rating.",
-                style = MaterialTheme.typography.bodySmall,
+                "This picture shows your star rating and a QR code. Post it on WhatsApp, Instagram or your " +
+                    "Swiggy/Zomato photos. Customers scan it to see how clean your kitchen is.",
+                style = MaterialTheme.typography.bodyMedium,
             )
             Button(
-                enabled = s != null,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                onClick = { QrLabel.share(context, badge, "badge_" + k.id.takeLast(6), "Share hygiene badge") },
+            ) { Text("Share badge", fontWeight = FontWeight.Bold) }
+            TextButton(
                 modifier = Modifier.fillMaxWidth(),
-                onClick = onClick@{
-                    val st = s ?: return@onClick
-                    val headline = if (st.eligible) "${st.stars} ★  ${st.rating}" else "New on KitchenLens"
-                    val detail = if (st.eligible) "${st.orders} sealed orders · last 30 days" else "Every order sealed with hygiene proof"
-                    val bmp = QrLabel.badgeBitmap(kitchenPageUrl(vm, k), k.name, headline, detail)
-                    QrLabel.share(context, bmp, "badge_" + k.id.takeLast(6), "Share hygiene badge")
-                },
-            ) { Text("Share hygiene badge") }
-            OutlinedButton(
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(kitchenPageUrl(vm, k)))) } },
-            ) { Text("Open my kitchen page") }
+                onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } },
+            ) { Text("See what customers see") }
         }
     }
 }

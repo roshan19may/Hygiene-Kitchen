@@ -24,6 +24,10 @@ final class FirebaseRepository: KitchenRepository {
 
     func signOut() { try? auth.signOut() }
 
+    func sendPasswordReset(email: String) async throws {
+        try await auth.sendPasswordReset(withEmail: email.trimmingCharacters(in: .whitespaces))
+    }
+
     func loadKitchenId() async throws -> String? {
         guard let uid = auth.currentUser?.uid else { return nil }
         return try await db.collection("users").document(uid).getDocument().data()?["kitchenId"] as? String

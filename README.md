@@ -361,3 +361,15 @@ a meal is safe.
 
 Seals created before this update have no preview copies; their thumbnails still work, just
 more slowly.
+
+## Create account screen
+
+The sign-in screen now has a clear **Create an account** button that opens its own screen:
+your name, kitchen email, password, confirm password, and agreement to the privacy policy.
+After creating the account the app goes straight to **Set up your kitchen**.
+
+- Errors are shown in plain words (email already registered, weak password, no internet, …).
+- **Forgot password?** on the sign-in screen emails a reset link (live mode).
+- If sign-up says *"Email sign-up is switched off for this app"*, open the Firebase console →
+  **Authentication → Sign-in method → Email/Password → Enable**.
+- In demo mode any email and password work; the account lives only on that phone.
