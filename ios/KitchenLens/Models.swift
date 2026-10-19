@@ -28,9 +28,16 @@ func dbl(_ v: Any?) -> Double? {
 
 enum MediaType: String { case photo, video }
 
+/// Reads a list stored either as an array or as "a|b|c" text.
+func stringSet(_ v: Any?) -> Set<String> {
+    if let a = v as? [Any] { return Set(a.compactMap { $0 as? String }.filter { !$0.isEmpty }) }
+    if let s = v as? String { return Set(s.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }) }
+    return []
+}
+
 /// The Kitchen Hygiene proof sections (same names and keys as the Android app).
 enum Section: String, CaseIterable, Identifiable {
-    case INVENTORY, UTENSILS, STAFF, PEST, PACKING
+    case INVENTORY, UTENSILS, STAFF, PEST, PACKING, SPOT
     var id: String { rawValue }
 
     var title: String {
@@ -40,6 +47,7 @@ enum Section: String, CaseIterable, Identifiable {
         case .STAFF: return "Chef, Support staff cooking hygiene"
         case .PEST: return "Pest control details"
         case .PACKING: return "Packing + temperature"
+        case .SPOT: return "Spot check"
         }
     }
     var subtitle: String {
@@ -49,6 +57,7 @@ enum Section: String, CaseIterable, Identifiable {
         case .STAFF: return "Hand-wash, cap, gloves, apron check"
         case .PEST: return "Service report photo + next due date"
         case .PACKING: return "Per-order Hygiene Food Packing clip and Order QR seal"
+        case .SPOT: return "A 10-second clip of the wash area and packing table, recorded when the app asks"
         }
     }
     var media: MediaType {
@@ -62,7 +71,7 @@ enum Section: String, CaseIterable, Identifiable {
         case .INVENTORY: return 48
         case .UTENSILS, .STAFF: return 12
         case .PEST: return 24 * 30
-        case .PACKING: return 0
+        case .PACKING, .SPOT: return 0
         }
     }
     static let proof: [Section] = [.INVENTORY, .UTENSILS, .STAFF, .PEST]
@@ -98,6 +107,15 @@ struct Kitchen: Identifiable {
     var tier = ""
     var latest: [String: [String: Any]] = [:]
     var recentHashes: [String] = []
+    /// Inventory categories this kitchen never stocks (left out of the score).
+    var notStocked: Set<String> = []
+    /// Official FSSAI Hygiene Rating declared by the kitchen ("" or "1"–"5") and its audit date.
+    var fssaiHygieneRating = ""
+    var fssaiAuditDate = ""
+    /// Times spot checks were answered (last 60).
+    var spotAnswers: [Int64] = []
+    /// Last 30 days of orders as "packedAtMillis|percent|status".
+    var orderStats: [String] = []
 
     static func from(id: String, _ m: [String: Any]) -> Kitchen {
         var k = Kitchen(id: id)
@@ -109,6 +127,11 @@ struct Kitchen: Identifiable {
         k.tier = m["tier"] as? String ?? ""
         k.latest = m["latest"] as? [String: [String: Any]] ?? [:]
         k.recentHashes = m["recentHashes"] as? [String] ?? []
+        k.notStocked = stringSet(m["notStocked"])
+        k.fssaiHygieneRating = m["fssaiHygieneRating"] as? String ?? ""
+        k.fssaiAuditDate = m["fssaiAuditDate"] as? String ?? ""
+        k.spotAnswers = (m["spotAnswers"] as? [Any] ?? []).compactMap { num($0) }
+        k.orderStats = m["orderStats"] as? [String] ?? []
         return k
     }
 }

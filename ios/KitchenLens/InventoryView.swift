@@ -65,6 +65,7 @@ struct InventoryView: View {
         error = nil
         if selected.isEmpty { error = "Choose at least one category that arrived"; return }
         if let m = selected.first(where: { (photos[$0] ?? []).isEmpty }) { error = "Add at least one photo for \(m)"; return }
+        if supplier.isEmpty { error = "Choose where the food was bought from"; return }
         if staffName.trimmingCharacters(in: .whitespaces).isEmpty { error = "Enter your name"; return }
         for (i, b) in bills.enumerated() {
             if b.categories.intersection(cats).isEmpty { error = "Bill \(i + 1): choose which categories it covers, or remove it"; return }
@@ -96,14 +97,18 @@ struct InventoryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Choose every category that arrived, then take one or more photos of each. Customers see the category and when it arrived, never item names or quantities.")
+                Text("Food inventory is worth 32 points: photos of each category (points shown below) and supplier bills (7). Perishables (vegetables, meat & fish, dairy) count for 48 hours, dry goods for 7 days, then they must be recorded again. Customers see categories, never item names or quantities.")
                     .font(.subheadline)
-                ChipPicker(label: "Categories received", options: INVENTORY_CATEGORIES, selected: $cats, multi: true)
+                ChipPicker(label: "Categories received", options: INVENTORY_CATEGORIES.filter { !(model.kitchen?.notStocked.contains($0) ?? false) },
+                           selected: $cats, multi: true)
+                if let ns = model.kitchen?.notStocked, !ns.isEmpty {
+                    Text("Not stocked (left out of your rating): \(ns.sorted().joined(separator: ", ")). Change this in Kitchen details.").font(.caption)
+                }
 
                 ForEach(selected, id: \.self) { cat in
                     let list = photos[cat] ?? []
                     Card {
-                        Text("\(cat) · \(list.count) photo\(list.count == 1 ? "" : "s")").font(.subheadline.weight(.semibold))
+                        Text("\(cat) · \(list.count) photo\(list.count == 1 ? "" : "s") · \(HygieneScore.weight(cat)) points").font(.subheadline.weight(.semibold))
                         if !list.isEmpty {
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 8) {
@@ -120,7 +125,7 @@ struct InventoryView: View {
                 }
 
                 Card(tint: Color(.secondarySystemBackground)) {
-                    Text("Supplier bills (optional)").font(.subheadline.weight(.semibold))
+                    Text("Supplier bills (7 points)").font(.subheadline.weight(.semibold))
                     Text("Add a bill if you have one: it improves customer trust, but you can save without it. Add one bill per supplier. If a single bill covers everything, tap \"Covers all categories\". Bill photos and supplier GST numbers stay private; customers only see the bill date.")
                         .font(.caption)
                     ForEach($bills) { $bill in
@@ -134,7 +139,7 @@ struct InventoryView: View {
                     if selected.isEmpty { Text("Choose the categories first, then add bills.").font(.caption) }
                 }
 
-                ChipPicker(label: "Bought from (optional)", options: SUPPLIER_TYPES, selected: $supplier)
+                ChipPicker(label: "Bought from (required)", options: SUPPLIER_TYPES, selected: $supplier)
                 TextField("Recorded by (your name)", text: $staffName).textFieldStyle(.roundedBorder)
                 ErrorText(text: error)
                 if working && progress > 0 { ProgressView(value: progress) }

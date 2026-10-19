@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.kitchenlens.app.util.CloudMedia
 import com.kitchenlens.app.util.HygieneScore
+import com.kitchenlens.app.util.KitchenStats
 import com.kitchenlens.app.util.QrLabel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -131,9 +132,18 @@ class LocalRepository(context: Context) : KitchenRepository {
         preUpload(listOf(mediaUrl), mediaType == MediaType.VIDEO)
         onProgress(1f)
         val now = System.currentTimeMillis()
+        if (section == Section.SPOT) {
+            // Spot checks count towards the kitchen rating; they don't replace a hygiene record
+            val k = kitchenMap()
+            k["spotAnswers"] = (kitchenFromMap(kitchen.id, k).spotAnswers + now).takeLast(60)
+            state.put("kitchen", toJson(k))
+            save()
+            kitchenFlow.value = kitchenFromMap(kitchen.id, k)
+            return@withContext
+        }
         commit(
             kitchen,
-            mapOf(key to publicSummary(now, mediaUrl, mediaType, label, details)),
+            mapOf(key to publicSummary(now, mediaUrl, mediaType, label, details + mapOf("recordedBy" to staffName.trim().substringBefore(" ")))),
             listOfNotNull(photoHash),
             listOf(mapOf("section" to section.name, "key" to key, "staffName" to staffName,
                 "mediaUrl" to mediaUrl, "details" to details, "label" to label, "capturedAtMillis" to now)),
@@ -154,7 +164,7 @@ class LocalRepository(context: Context) : KitchenRepository {
         commit(
             kitchen,
             records.associate { r ->
-                r.key to publicSummary(now, r.mediaUrls.first(), MediaType.PHOTO, r.label, r.details, r.mediaUrls)
+                r.key to publicSummary(now, r.mediaUrls.first(), MediaType.PHOTO, r.label, r.details + mapOf("recordedBy" to staffName.trim().substringBefore(" ")), r.mediaUrls)
             },
             photos.values.flatten().map { it.hash },
             records.map { r ->
@@ -174,7 +184,6 @@ class LocalRepository(context: Context) : KitchenRepository {
         var fresh = getKitchen(kitchen.id)
         val now = System.currentTimeMillis()
         val tempOk = HygieneScore.temperatureOk(foodType, tempC)
-        val score = HygieneScore.compute(fresh.latest, tempOk, now)
         var cloudExtras = emptyMap<String, Any?>()
         if (cloud.isConfigured) {
             // Upload the packing clip and any not-yet-uploaded hygiene photos/clips
@@ -188,7 +197,15 @@ class LocalRepository(context: Context) : KitchenRepository {
             cloudExtras = mapOf("cloudName" to cloud.cloudName, "clipCloudId" to clipId)
         }
         onProgress(1f)
-        val record = buildOrderRecord(fresh, platform, orderRef, packerName, foodType, tempC, tempOk, clipUrl, now, score, clipRecordedAt) + cloudExtras
+        val scoreResult = HygieneScore.computeWeighted(fresh.latest, foodType, tempC, packerName, clipUrl, now, fresh.notStocked)
+        val score = scoreResult.percent
+        val stats = kitchenStats(fresh, now)
+        val record = buildOrderRecord(fresh, platform, orderRef, packerName, foodType, tempC, tempOk, clipUrl, now, score,
+            clipRecordedAt, scoreResult.toMap(), stats.toMap()) + cloudExtras
+        val k = kitchenMap()
+        k["orderStats"] = KitchenStats.append(fresh.orderStats, KitchenStats.encode(now, score, scoreResult.status), now)
+        state.put("kitchen", toJson(k))
+        kitchenFlow.value = kitchenFromMap(kitchen.id, k)
         val orders = state.optJSONObject("orders") ?: JSONObject()
         orders.put(code, toJson(record))
         state.put("orders", orders)
@@ -233,6 +250,17 @@ class LocalRepository(context: Context) : KitchenRepository {
         save()
         kitchenFlow.value = null
     }
+
+    /** Demo mode has no server for customers to send feedback to. */
+    override suspend fun recentFeedback(kitchenId: String, since: Long): List<Pair<Boolean, Boolean>> = emptyList()
+
+    override suspend fun publishKitchen(kitchen: Kitchen, stats: KitchenStats) {
+        state.put("publicKitchen", toJson(publicKitchenMap(kitchen, stats)))
+        save()
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    fun publicKitchen(): Map<String, Any?>? = state.optJSONObject("publicKitchen")?.let { fromJson(it) as Map<String, Any?> }
 
     override suspend fun findOrderCode(platform: String, orderRef: String): String? {
         if (orderRef.isBlank()) return null

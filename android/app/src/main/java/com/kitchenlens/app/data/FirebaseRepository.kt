@@ -7,9 +7,11 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.StorageMetadata
 import com.kitchenlens.app.util.HygieneScore
+import com.kitchenlens.app.util.KitchenStats
 import com.kitchenlens.app.util.QrLabel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -103,9 +105,13 @@ class FirebaseRepository : KitchenRepository {
         val now = System.currentTimeMillis()
 
         val kitchenRef = db.collection("kitchens").document(kitchen.id)
-        val updates = mutableMapOf<String, Any>(
-            "latest.$key" to publicSummary(now, mediaUrl, mediaType, label, details),
-        )
+        val updates = mutableMapOf<String, Any>()
+        if (section == Section.SPOT) {
+            // Spot checks count towards the kitchen rating; they don't replace a hygiene record
+            updates["spotAnswers"] = (kitchen.spotAnswers + now).takeLast(60)
+        } else {
+            updates["latest.$key"] = publicSummary(now, mediaUrl, mediaType, label, details + mapOf("recordedBy" to staffName.trim().substringBefore(" ")))
+        }
         if (photoHash != null) updates["recentHashes"] = (listOf(photoHash) + kitchen.recentHashes).take(60)
 
         db.batch()
@@ -145,7 +151,7 @@ class FirebaseRepository : KitchenRepository {
         val updates = mutableMapOf<String, Any>()
         val batch = db.batch()
         records.forEach { r ->
-            updates["latest.${r.key}"] = publicSummary(now, r.mediaUrls.first(), MediaType.PHOTO, r.label, r.details, r.mediaUrls)
+            updates["latest.${r.key}"] = publicSummary(now, r.mediaUrls.first(), MediaType.PHOTO, r.label, r.details + mapOf("recordedBy" to staffName.trim().substringBefore(" ")), r.mediaUrls)
             batch.set(kitchenRef.collection("logs").document(), mapOf(
                 "section" to Section.INVENTORY.name, "key" to r.key, "staffName" to staffName.trim(),
                 "mediaType" to MediaType.PHOTO.value, "mediaUrl" to r.mediaUrls.first(), "mediaUrls" to r.mediaUrls,
@@ -172,8 +178,12 @@ class FirebaseRepository : KitchenRepository {
         val fresh = getKitchen(kitchen.id) // latest hygiene state at the moment of packing
         val now = System.currentTimeMillis()
         val tempOk = HygieneScore.temperatureOk(foodType, tempC)
-        val score = HygieneScore.compute(fresh.latest, tempOk, now)
-        val record = buildOrderRecord(fresh, platform, orderRef, packerName, foodType, tempC, tempOk, clipUrl, now, score, clipRecordedAt)
+        val scoreResult = HygieneScore.computeWeighted(fresh.latest, foodType, tempC, packerName, clipUrl, now, fresh.notStocked)
+        val score = scoreResult.percent
+        val stats = runCatching { kitchenStats(fresh, now) }.getOrNull()
+        val record = buildOrderRecord(fresh, platform, orderRef, packerName, foodType, tempC, tempOk, clipUrl, now, score,
+            clipRecordedAt, scoreResult.toMap(), stats?.toMap() ?: emptyMap())
+        val orderStats = KitchenStats.append(fresh.orderStats, KitchenStats.encode(now, score, scoreResult.status), now)
 
         db.batch()
             .set(db.collection("orders").document(code), record + ("createdAt" to FieldValue.serverTimestamp()))
@@ -190,6 +200,8 @@ class FirebaseRepository : KitchenRepository {
                 "label" to "Order packed", "capturedAtMillis" to now,
                 "createdAt" to FieldValue.serverTimestamp(),
             ))
+            // Rolling 30-day list used for the kitchen rating (no extra reads needed)
+            .update(db.collection("kitchens").document(kitchen.id), "orderStats", orderStats)
             .commit().await()
         return orderSummaryFromMap(code, record)
     }
@@ -224,6 +236,9 @@ class FirebaseRepository : KitchenRepository {
             val orders = db.collection("orders").whereEqualTo("kitchenId", kid).get().await().documents
             val refs = orders.mapNotNull { (it.getString("orderRefKey"))?.let { k -> db.collection("orderRefs").document(k) } }
             deleteInBatches(refs + orders.map { it.reference })
+            // Customer feedback and the public kitchen page
+            deleteInBatches(db.collection("feedback").whereEqualTo("kitchenId", kid).get().await().documents.map { it.reference })
+            runCatching { db.collection("publicKitchens").document(kid).delete().await() }
             // Photos and clips
             deleteStorageFolder(storage.reference.child("kitchens/$kid"))
             kitchenRef.delete().await()
@@ -244,6 +259,19 @@ class FirebaseRepository : KitchenRepository {
         val list = folder.listAll().await()
         list.items.forEach { runCatching { it.delete().await() } }
         list.prefixes.forEach { deleteStorageFolder(it) }
+    }
+
+    override suspend fun recentFeedback(kitchenId: String, since: Long): List<Pair<Boolean, Boolean>> =
+        db.collection("feedback")
+            .whereEqualTo("kitchenId", kitchenId)
+            .whereGreaterThanOrEqualTo("at", since)
+            .limit(1000)
+            .get().await()
+            .documents.map { (it.getBoolean("sealIntact") ?: false) to (it.getBoolean("foodHot") ?: false) }
+
+    override suspend fun publishKitchen(kitchen: Kitchen, stats: KitchenStats) {
+        // merge: never touches "verifiedVisit", which only KitchenLens staff can set
+        db.collection("publicKitchens").document(kitchen.id).set(publicKitchenMap(kitchen, stats), SetOptions.merge()).await()
     }
 
     override suspend fun getOrder(code: String): Map<String, Any?>? =

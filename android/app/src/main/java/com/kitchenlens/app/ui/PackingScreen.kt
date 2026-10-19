@@ -196,7 +196,7 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
 
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Food temperature at packing", fontWeight = FontWeight.SemiBold)
+                    Text("Food temperature at packing (8 points)", fontWeight = FontWeight.SemiBold)
                     ChipPicker("Food type", listOf("Hot", "Cold"), foodType, multi = false) { foodType = it }
                     OutlinedTextField(
                         tempText, { tempText = it.filter { c -> c.isDigit() || c == '.' || c == ',' || c == '-' }.take(5) },
@@ -217,8 +217,8 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
                             Text(
                                 when {
                                     tempOk -> "Meets the guideline"
-                                    foodType.first() == "Hot" -> "Warning: below the 65°C FSSAI guideline. Reheat if you can. You can still continue; customers see the reading you enter."
-                                    else -> "Warning: above the 5°C guideline. Chill if you can. You can still continue; customers see the reading you enter."
+                                    foodType.first() == "Hot" -> "Warning: below the 65°C FSSAI guideline. Reheat if you can. You can still continue, but the seal will show \"Rating withheld – food below 65°C\" instead of a star rating."
+                                    else -> "Warning: above the 5°C guideline. Chill if you can. You can still continue, but the seal will show \"Rating withheld – food above 5°C\" instead of a star rating."
                                 },
                                 color = if (tempOk) Ok else Chilli,
                             )
@@ -229,7 +229,7 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
 
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Hygiene Food Packing clip (5–20 s, no sound)", fontWeight = FontWeight.SemiBold)
+                    Text("Hygiene Food Packing clip (15 points; 5–20 s, no sound)", fontWeight = FontWeight.SemiBold)
                     if (clip != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.CheckCircle, null, tint = Ok)

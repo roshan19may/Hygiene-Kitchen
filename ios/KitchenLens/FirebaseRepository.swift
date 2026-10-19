@@ -73,7 +73,15 @@ final class FirebaseRepository: KitchenRepository {
                                         contentType: video ? "video/mp4" : "image/jpeg", progress: progress)
         let now = nowMs()
         let kitchenRef = db.collection("kitchens").document(kitchen.id)
-        var updates: [String: Any] = ["latest.\(key)": publicSummary(at: now, mediaUrl: mediaUrl, mediaType: mediaType, label: label, details: details)]
+        var updates: [String: Any] = [:]
+        if section == .SPOT {
+            // Spot checks count towards the kitchen rating; they don't replace a hygiene record
+            updates["spotAnswers"] = Array((kitchen.spotAnswers + [now]).suffix(60))
+        } else {
+            var d = details
+            d["recordedBy"] = recordedBy(staffName)
+            updates["latest.\(key)"] = publicSummary(at: now, mediaUrl: mediaUrl, mediaType: mediaType, label: label, details: d)
+        }
         if let h = photoHash { updates["recentHashes"] = Array(([h] + kitchen.recentHashes).prefix(60)) }
         let batch = db.batch()
         batch.setData(["section": section.rawValue, "key": key, "staffName": staffName.trimmingCharacters(in: .whitespaces),
@@ -110,8 +118,10 @@ final class FirebaseRepository: KitchenRepository {
         var updates: [String: Any] = [:]
         let batch = db.batch()
         for r in records {
+            var d = r.details
+            d["recordedBy"] = recordedBy(staffName)
             updates["latest.\(r.key)"] = publicSummary(at: now, mediaUrl: r.mediaUrls[0], mediaType: .photo, label: r.label,
-                                                      details: r.details, mediaUrls: r.mediaUrls)
+                                                      details: d, mediaUrls: r.mediaUrls)
             batch.setData(["section": "INVENTORY", "key": r.key, "staffName": staffName.trimmingCharacters(in: .whitespaces),
                            "mediaType": "photo", "mediaUrl": r.mediaUrls[0], "mediaUrls": r.mediaUrls, "details": r.details,
                            "label": r.label, "capturedAtMillis": now, "createdAt": FieldValue.serverTimestamp()],
@@ -139,10 +149,15 @@ final class FirebaseRepository: KitchenRepository {
         let fresh = try await getKitchen(kitchen.id)
         let now = nowMs()
         let tempOk = HygieneScore.temperatureOk(foodType: foodType, tempC: tempC)
-        let score = HygieneScore.compute(latest: fresh.latest, tempOk: tempOk, now: now)
+        let result = HygieneScore.compute(latest: fresh.latest, foodType: foodType, tempC: tempC, packerName: packerName,
+                                          packingClipUrl: clipUrl, now: now, notStocked: fresh.notStocked)
+        let score = result.percent
+        let stats = await kitchenStats(fresh, now: now)
         var record = buildOrderRecord(kitchen: fresh, platform: platform, orderRef: orderRef, packerName: packerName,
                                       foodType: foodType, tempC: tempC, tempOk: tempOk, clipUrl: clipUrl, packedAt: now,
-                                      score: score, clipRecordedAt: clipRecordedAt)
+                                      score: score, clipRecordedAt: clipRecordedAt,
+                                      scoreBreakdown: result.map, kitchenStats: stats.map)
+        let orderStats = KitchenStats.append(fresh.orderStats, KitchenStats.encode(now, score, result.status), now: now)
         let batch = db.batch()
         record["createdAt"] = FieldValue.serverTimestamp()
         batch.setData(record, forDocument: db.collection("orders").document(code))
@@ -155,6 +170,8 @@ final class FirebaseRepository: KitchenRepository {
                        "details": ["orderRef": orderRef, "platform": platform, "code": code, "tempC": String(tempC), "foodType": foodType],
                        "label": "Order packed", "capturedAtMillis": now, "createdAt": FieldValue.serverTimestamp()],
                       forDocument: db.collection("kitchens").document(kitchen.id).collection("logs").document())
+        // Rolling 30-day list used for the kitchen rating (no extra reads needed)
+        batch.updateData(["orderStats": orderStats], forDocument: db.collection("kitchens").document(kitchen.id))
         try await batch.commit()
         record.removeValue(forKey: "createdAt")
         return OrderSummary.from(code: code, record)
@@ -172,6 +189,17 @@ final class FirebaseRepository: KitchenRepository {
         return snap.exists ? snap.data()?["code"] as? String : nil
     }
 
+    func recentFeedback(kitchenId: String, since: Int64) async throws -> [(Bool, Bool)] {
+        let snap = try await db.collection("feedback").whereField("kitchenId", isEqualTo: kitchenId)
+            .whereField("at", isGreaterThanOrEqualTo: since).limit(to: 1000).getDocuments()
+        return snap.documents.map { (($0.data()["sealIntact"] as? Bool) ?? false, ($0.data()["foodHot"] as? Bool) ?? false) }
+    }
+
+    func publishKitchen(_ kitchen: Kitchen, stats: KitchenStats) async throws {
+        // merge: never touches "verifiedVisit", which only KitchenLens staff can set
+        try await db.collection("publicKitchens").document(kitchen.id).setData(publicKitchenMap(kitchen, stats), merge: true)
+    }
+
     func getOrder(_ code: String) async throws -> [String: Any]? {
         try await db.collection("orders").document(code).getDocument().data()
     }
@@ -187,6 +215,8 @@ final class FirebaseRepository: KitchenRepository {
             let orders = try await db.collection("orders").whereField("kitchenId", isEqualTo: kid).getDocuments().documents
             let refs = orders.compactMap { ($0.data()["orderRefKey"] as? String).map { db.collection("orderRefs").document($0) } }
             try await deleteAll(refs + orders.map(\.reference))
+            try await deleteAll(try await db.collection("feedback").whereField("kitchenId", isEqualTo: kid).getDocuments().documents.map(\.reference))
+            try? await db.collection("publicKitchens").document(kid).delete()
             try await deleteFolder(storage.reference().child("kitchens/\(kid)"))
             try await kitchenRef.delete()
         }

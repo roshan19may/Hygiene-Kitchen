@@ -54,23 +54,39 @@ struct ProfileForm {
     var fssai = ""
     var gstin = ""
     var tier: Set<String> = [TIERS[0]]
+    var fssaiRating: Set<String> = [ProfileForm.noRating]
+    var fssaiAuditDate = ""
+    var notStocked: Set<String> = []
+
+    static let noRating = "Not rated"
+    static let ratingOptions = [noRating, "1", "2", "3", "4", "5"]
 
     init() {}
     init(_ k: Kitchen) {
         name = k.name; locality = k.locality; city = [k.city.isEmpty ? CITIES[0] : k.city]
         fssai = k.fssai; gstin = k.gstin; tier = [k.tier.isEmpty ? TIERS[0] : k.tier]
+        fssaiRating = [k.fssaiHygieneRating.isEmpty ? ProfileForm.noRating : k.fssaiHygieneRating]
+        fssaiAuditDate = k.fssaiAuditDate; notStocked = k.notStocked
     }
+
+    private var ratingValue: String { fssaiRating.first.flatMap { $0 == ProfileForm.noRating ? nil : $0 } ?? "" }
 
     func validate() -> String? {
         if name.trimmingCharacters(in: .whitespaces).isEmpty { return "Enter the kitchen name" }
         if locality.trimmingCharacters(in: .whitespaces).isEmpty { return "Enter the locality" }
         if fssai.count != 14 { return "FSSAI number must be 14 digits" }
+        if !ratingValue.isEmpty {
+            guard let t = Dates.parse(fssaiAuditDate) else { return "Enter the FSSAI hygiene audit date as dd-mm-yyyy" }
+            if t > nowMs() { return "The FSSAI audit date can't be in the future" }
+        }
+        if notStocked.count >= INVENTORY_CATEGORIES.count { return "At least one inventory category must be stocked" }
         return Gstin.formError(gstin, required: false)
     }
 
     var map: [String: String] {
         profileMap(name: name, locality: locality, city: city.first ?? CITIES[0], fssai: fssai,
-                   gstin: Gstin.normalize(gstin), tier: tier.first ?? TIERS[0])
+                   gstin: Gstin.normalize(gstin), tier: tier.first ?? TIERS[0],
+                   fssaiHygieneRating: ratingValue, fssaiAuditDate: ratingValue.isEmpty ? "" : fssaiAuditDate, notStocked: notStocked)
     }
 }
 
@@ -100,6 +116,58 @@ struct ProfileFields: View {
                     .foregroundColor(Gstin.formError(form.gstin, required: false) != nil ? Brand.chilli : .secondary)
             }
             ChipPicker(label: "Kitchen area (kit tier)", options: TIERS, selected: $form.tier)
+
+            ChipPicker(label: "Inventory you never stock (left out of your hygiene rating)", options: INVENTORY_CATEGORIES,
+                       selected: $form.notStocked, multi: true)
+            Text("For example, a vegetarian kitchen selects Meat & Fish. Customers see that it is not stocked.").font(.caption)
+
+            ChipPicker(label: "Official FSSAI Hygiene Rating (if you have the certificate)", options: ProfileForm.ratingOptions,
+                       selected: Binding(get: { form.fssaiRating }, set: { form.fssaiRating = $0.isEmpty ? [ProfileForm.noRating] : $0 }))
+            if form.fssaiRating.first != ProfileForm.noRating {
+                TextField("FSSAI hygiene audit date (dd-mm-yyyy)", text: $form.fssaiAuditDate).textFieldStyle(.roundedBorder)
+                Text("Shown to customers as \"declared by the kitchen\", separate from the KitchenLens rating. Keep the certificate ready: customers may ask for it. Certificates are valid for 2 years.")
+                    .font(.caption)
+            }
+        }
+    }
+}
+
+/// Public kitchen page address; demo mode packs the profile into the link (no server).
+@MainActor
+func kitchenPageURL(_ model: AppModel, _ k: Kitchen) -> String {
+    let base = AppConfig.webBaseURL + "kitchen.html?k=" + (k.id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? k.id)
+    guard model.repo.isDemo, let pub = model.local?.publicKitchen else { return base }
+    return base + "&d=" + OfflineSeal.kitchenPayload(pub)
+}
+
+/// Badge with the kitchen's 30-day rating, to share on listings and social media.
+struct KitchenBadgeCard: View {
+    @EnvironmentObject var model: AppModel
+    let kitchen: Kitchen
+    @State private var share: UIImage?
+    @State private var web: URL?
+
+    var body: some View {
+        Card(tint: Brand.leafLight) {
+            Text("Your kitchen hygiene badge").font(.headline)
+            Text(model.kitchenStats?.summary() ?? "Calculating your 30-day rating…").font(.subheadline)
+            Text("Post this badge on your Swiggy and Zomato menu photos, Instagram and Google listing. Its QR opens your kitchen page with your live rating.")
+                .font(.caption)
+            Button {
+                guard let st = model.kitchenStats else { return }
+                share = QrLabel.badge(url: kitchenPageURL(model, kitchen), kitchenName: kitchen.name,
+                                      headline: st.eligible ? "\(String(format: "%.1f", st.stars)) ★  \(st.rating)" : "New on KitchenLens",
+                                      detail: st.eligible ? "\(st.orders) sealed orders · last 30 days" : "Every order sealed with hygiene proof")
+            } label: { Text("Share hygiene badge").frame(maxWidth: .infinity) }
+                .buttonStyle(.borderedProminent).disabled(model.kitchenStats == nil)
+            Button { web = URL(string: kitchenPageURL(model, kitchen)) } label: { Text("Open my kitchen page").frame(maxWidth: .infinity) }
+                .buttonStyle(.bordered)
+        }
+        .sheet(isPresented: Binding(get: { share != nil }, set: { if !$0 { share = nil } })) {
+            if let img = share { ShareSheet(items: [img]) }
+        }
+        .sheet(isPresented: Binding(get: { web != nil }, set: { if !$0 { web = nil } })) {
+            if let u = web { SafariView(url: u).ignoresSafeArea() }
         }
     }
 }
@@ -150,6 +218,7 @@ struct EditKitchenView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Changes appear on QR seals printed from now on.").font(.footnote).foregroundColor(.secondary)
+                if let k = model.kitchen { KitchenBadgeCard(kitchen: k) }
                 if let local = model.local { CloudStorageCard(cloud: local.cloud) }
                 ProfileFields(form: $form)
                 ErrorText(text: error)

@@ -27,6 +27,23 @@ protocol KitchenRepository: AnyObject {
     func getOrder(_ code: String) async throws -> [String: Any]?
     /// Permanently deletes the account and all its data (store requirement).
     func deleteAccount(password: String) async throws
+    /// Customer answers from the last 30 days: (seal intact, food at the right temperature). Live mode only.
+    func recentFeedback(kitchenId: String, since: Int64) async throws -> [(Bool, Bool)]
+    /// Publishes the public kitchen page (profile and 30-day rating).
+    func publishKitchen(_ kitchen: Kitchen, stats: KitchenStats) async throws
+}
+
+extension KitchenRepository {
+    /// The kitchen's 30-day rating from its rolling order list, spot checks and customer feedback.
+    func kitchenStats(_ k: Kitchen, now: Int64 = nowMs()) async -> KitchenStats {
+        let feedback = (try? await recentFeedback(kitchenId: k.id, since: now - KitchenStats.windowDays * 24 * 3_600_000)) ?? []
+        return KitchenStats.compute(kitchenId: k.id, orderStats: k.orderStats, spotAnswers: k.spotAnswers, feedback: feedback, now: now)
+    }
+}
+
+/// First name of whoever recorded a step (kept with the public record, like Android).
+func recordedBy(_ staffName: String) -> String {
+    staffName.trimmingCharacters(in: .whitespaces).split(separator: " ").first.map(String.init) ?? ""
 }
 
 // MARK: - Demo mode: everything stays on this iPhone
@@ -130,7 +147,17 @@ final class LocalRepository: KitchenRepository {
         await preUpload([url], video: mediaType == .video)
         progress(1)
         let now = nowMs()
-        commit(kitchen, summaries: [key: publicSummary(at: now, mediaUrl: url, mediaType: mediaType, label: label, details: details)],
+        if section == .SPOT {
+            // Spot checks count towards the kitchen rating; they don't replace a hygiene record
+            var k = kitchenMap
+            k["spotAnswers"] = Array((Kitchen.from(id: kitchen.id, k).spotAnswers + [now]).suffix(60))
+            kitchenMap = k
+            save()
+            return
+        }
+        var d = details
+        d["recordedBy"] = recordedBy(staffName)
+        commit(kitchen, summaries: [key: publicSummary(at: now, mediaUrl: url, mediaType: mediaType, label: label, details: d)],
                newHashes: photoHash.map { [$0] } ?? [],
                logs: [["section": section.rawValue, "key": key, "staffName": staffName, "mediaUrl": url,
                        "details": details, "label": label, "capturedAtMillis": now]])
@@ -147,8 +174,10 @@ final class LocalRepository: KitchenRepository {
         let records = buildInventoryRecords(photoUrls: photoUrls, bills: bills, billUrls: billUrls, supplierType: supplierType)
         var summaries: [String: [String: Any]] = [:]
         for r in records {
+            var d = r.details
+            d["recordedBy"] = recordedBy(staffName)
             summaries[r.key] = publicSummary(at: now, mediaUrl: r.mediaUrls[0], mediaType: .photo, label: r.label,
-                                             details: r.details, mediaUrls: r.mediaUrls)
+                                             details: d, mediaUrls: r.mediaUrls)
         }
         commit(kitchen, summaries: summaries, newHashes: photos.values.flatMap { $0.map(\.hash) },
                logs: records.map { ["section": "INVENTORY", "key": $0.key, "staffName": staffName, "mediaUrls": $0.mediaUrls,
@@ -185,7 +214,10 @@ final class LocalRepository: KitchenRepository {
         var fresh = try await getKitchen(kitchen.id)
         let now = nowMs()
         let tempOk = HygieneScore.temperatureOk(foodType: foodType, tempC: tempC)
-        let score = HygieneScore.compute(latest: fresh.latest, tempOk: tempOk, now: now)
+        let result = HygieneScore.compute(latest: fresh.latest, foodType: foodType, tempC: tempC, packerName: packerName,
+                                          packingClipUrl: clipUrl, now: now, notStocked: fresh.notStocked)
+        let score = result.percent
+        let stats = await kitchenStats(fresh, now: now)
         var extras: [String: Any] = [:]
         if cloud.isConfigured {
             let total = 1 + fresh.latest.values.reduce(0) { $0 + max(1, ($1["mediaUrls"] as? [String])?.count ?? 1) }
@@ -199,8 +231,12 @@ final class LocalRepository: KitchenRepository {
         progress(1)
         var record = buildOrderRecord(kitchen: fresh, platform: platform, orderRef: orderRef, packerName: packerName,
                                       foodType: foodType, tempC: tempC, tempOk: tempOk, clipUrl: clipUrl, packedAt: now,
-                                      score: score, clipRecordedAt: clipRecordedAt)
+                                      score: score, clipRecordedAt: clipRecordedAt,
+                                      scoreBreakdown: result.map, kitchenStats: stats.map)
         extras.forEach { record[$0.key] = $0.value }
+        var k = kitchenMap
+        k["orderStats"] = KitchenStats.append(fresh.orderStats, KitchenStats.encode(now, score, result.status), now: now)
+        kitchenMap = k
         var orders = state["orders"] as? [String: Any] ?? [:]
         orders[code] = record
         state["orders"] = orders
@@ -247,6 +283,16 @@ final class LocalRepository: KitchenRepository {
     }
 
     func getOrder(_ code: String) async throws -> [String: Any]? { (state["orders"] as? [String: Any])?[code] as? [String: Any] }
+
+    /// Demo mode has no server for customers to send feedback to.
+    func recentFeedback(kitchenId: String, since: Int64) async throws -> [(Bool, Bool)] { [] }
+
+    func publishKitchen(_ kitchen: Kitchen, stats: KitchenStats) async throws {
+        state["publicKitchen"] = publicKitchenMap(kitchen, stats)
+        save()
+    }
+
+    var publicKitchen: [String: Any]? { state["publicKitchen"] as? [String: Any] }
 
     func deleteAccount(password: String) async throws {
         try? FileManager.default.removeItem(at: dir)

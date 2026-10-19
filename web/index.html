@@ -65,6 +65,65 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .brandtag { font-size: .76rem; color: var(--muted); }
 .status-pill { display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; padding: 6px 10px; background: var(--brand-soft); color: var(--brand-dark); font-size: .78rem; font-weight: 750; white-space: nowrap; }
 .status-pill::before { content: ""; width: 7px; height: 7px; background: currentColor; border-radius: 50%; }
+.rating-chip { display:flex; flex-direction:column; align-items:flex-end; gap:2px; border:1px solid #cfe3d7; border-radius:14px; padding:8px 12px; background:var(--brand-soft); text-align:right; flex:0 0 auto; color:inherit; text-decoration:none; max-width:56%; }
+.rating-chip:hover { filter:brightness(.98); }
+.rating-chip .rating-kicker { color:var(--muted); font-size:.62rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+.rating-chip .rating-row { display:flex; align-items:center; gap:6px; }
+.rating-chip .rating-num { font-weight:850; font-size:1.3rem; line-height:1.1; color:var(--brand-dark); font-variant-numeric:tabular-nums; }
+.rating-chip .rating-name { font-weight:800; font-size:.84rem; line-height:1.2; color:var(--brand-dark); }
+.rating-chip .rating-sub { font-size:.72rem; font-weight:700; color:var(--muted); line-height:1.25; }
+.rating-chip.pending { background:#fff7e5; border-color:#f0d79a; }
+.rating-chip.pending .rating-name { color:#8a5b12; }
+.rating-chip.review { background:#fff0ed; border-color:#f4c7c0; }
+.rating-chip.review .rating-name { color:var(--bad); }
+.rating-chip.legacy { background:#f3f5f4; border-color:var(--line); }
+.rating-chip.legacy .rating-name { color:var(--muted); }
+/* Star meter: the gold part covers stars/5 of the width */
+.stars { --p: 0%; display:inline-block; font-size:1.05rem; line-height:1; letter-spacing:1px; white-space:nowrap;
+  background:linear-gradient(90deg, #e3a21a var(--p), #cfd8d3 var(--p)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+.stars.big { font-size:1.6rem; }
+.kcard { display:flex; flex-direction:column; gap:12px; }
+.krow { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+.knum { font-size:2.1rem; font-weight:850; letter-spacing:-.04em; line-height:1; color:var(--brand-dark); font-variant-numeric:tabular-nums; }
+.kword { font-weight:800; }
+.kmetrics { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px; }
+.kmetric { border:1px solid var(--line); border-radius:12px; padding:10px 12px; background:#fbfdfb; font-size:.82rem; color:var(--muted); }
+.kmetric strong { display:block; color:var(--ink); font-size:1.02rem; }
+.verified { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:6px 11px; background:#e7f5ec; color:var(--ok); font-weight:800; font-size:.8rem; }
+.declared { margin-top:6px; font-size:.84rem; color:var(--muted); }
+.declared strong { color:var(--ink); }
+.fb { display:flex; flex-direction:column; gap:12px; }
+.fbq { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; }
+.fbq .opts { display:flex; gap:8px; }
+.fbq button { appearance:none; border:1px solid var(--line); background:#fff; border-radius:999px; padding:8px 16px; font-weight:750; cursor:pointer; }
+.fbq button[aria-pressed="true"] { background:var(--brand); border-color:var(--brand); color:#fff; }
+.score-sections { display:flex; flex-direction:column; gap:12px; }
+.score-section { border:1px solid var(--line); border-radius:12px; padding:12px; }
+.score-section summary { cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:12px; font-weight:750; list-style:none; }
+.score-section summary::-webkit-details-marker { display:none; }
+.score-section summary::after { content:"+"; color:var(--brand); font-size:1.1rem; }
+.score-section[open] summary::after { content:"−"; }
+.score-points { font-variant-numeric:tabular-nums; white-space:nowrap; color:var(--brand-dark); font-weight:850; }
+.score-bar { height:6px; background:#eaf0ec; border-radius:999px; overflow:hidden; margin:10px 0; }
+.score-bar span { display:block; height:100%; background:var(--brand); border-radius:999px; }
+.score-item { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; padding:7px 0; border-top:1px solid #edf1ee; font-size:.83rem; }
+.score-item .item-note { color:var(--muted); font-size:.76rem; grid-column:1 / -1; }
+.score-total { display:flex; align-items:center; justify-content:space-between; gap:12px; font-weight:800; padding-top:12px; }
+.rating-legend { display:flex; flex-direction:column; gap:7px; margin-top:10px; }
+.rating-legend div { display:flex; justify-content:space-between; gap:12px; font-size:.82rem; }
+.brandbar { align-items:flex-start; }
+/* Phones: keep the rating badge at the top right, beside a smaller logo */
+@media (max-width:520px) {
+  .brandtag { display:none; }
+  .brandicon { width:36px; height:36px; border-radius:11px; }
+  .rating-chip { padding:6px 10px; max-width:62%; }
+  .rating-chip .rating-kicker { font-size:.56rem; }
+  .rating-chip .rating-num { font-size:1.12rem; }
+  .stars { font-size:.92rem; }
+  .kmetrics { grid-template-columns:1fr; }
+}
+@media print { .score-section { break-inside:avoid; } .score-section:not([open]) .score-item { display:grid; } }
+
 .reporthead { display: flex; flex-direction: column; gap: 18px; }
 .kitchenrow { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .kitchen { min-width: 0; }
@@ -289,6 +348,28 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     });
   }
 
+  function fetchDoc(path) {
+    var url = "https://firestore.googleapis.com/v1/projects/" + encodeURIComponent(CFG.projectId) +
+      "/databases/(default)/documents/" + path + "?key=" + encodeURIComponent(CFG.apiKey);
+    return fetch(url).then(function (r) {
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error("Server responded " + r.status);
+      return r.json().then(function (d) { return decodeFields(d.fields || {}); });
+    });
+  }
+  /* One answer per seal; the database rules check that the seal exists */
+  function sendFeedback(code, kitchenId, sealIntact, foodHot) {
+    var url = "https://firestore.googleapis.com/v1/projects/" + encodeURIComponent(CFG.projectId) +
+      "/databases/(default)/documents/feedback?documentId=" + encodeURIComponent(code) + "&key=" + encodeURIComponent(CFG.apiKey);
+    return fetch(url, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fields: {
+        kitchenId: { stringValue: kitchenId }, sealIntact: { booleanValue: sealIntact },
+        foodHot: { booleanValue: foodHot }, at: { integerValue: String(Date.now()) }
+      } })
+    }).then(function (r) { if (r.status === 409) return "duplicate"; if (!r.ok) throw new Error(r.status); return "ok"; });
+  }
+
   /* Platform + order number -> lookup key (same rule as the app's orderRefKey) */
   function refKey(platform, ref) {
     function clean(x) { return String(x || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); }
@@ -336,9 +417,37 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
       offline: true, kitchenName: p.k, kitchenLocality: p.a, kitchenCity: "", fssai: p.f, gstin: p.g,
       platform: p.p, orderRef: p.o, packerName: p.n, foodType: p.ft === "C" ? "Cold" : "Hot",
       tempC: p.t, tempOk: !!p.tk, score: p.s, packedAtMillis: packed, clipUrl: cloudUrl(p.cl, p.c, true), snapshot: snap,
+      scoreComplete: !!p.co, safetyGatePassed: !!p.sg,
+      scoreBreakdown: offlineBreakdown(p),
+      notStocked: p.ns ? String(p.ns).split("|") : [],
+      fssaiHygieneRating: p.fh || "", fssaiAuditDate: p.fa || "",
+      kitchenStats: offlineStats(p.ks),
       clipRecordedAt: p.cr ? packed - p.cr * 1000 : packed,
       hasCloud: !!(p.cl && p.c)
     };
+  }
+
+  var SECTION_KEYS = ["INVENTORY", "UTENSILS", "STAFF", "PEST", "PACKING"];
+  var SECTION_NAMES = ["Food inventory details", "Cooking utensils cleaning", "Chef and support-staff hygiene", "Pest control", "Food packing and temperature"];
+  /* Seals from before the rating system carry no breakdown at all */
+  function offlineBreakdown(p) {
+    if (p.b === undefined && p.co === undefined) return null;
+    var maxima = p.bm ? String(p.bm).split(",").map(Number) : [32, 15, 15, 15, 23];
+    var status = p.st === "r" ? "rated" : p.st === "w" ? "withheld" : p.st === "i" ? "incomplete" : "";
+    return {
+      complete: !!p.co, safetyGatePassed: !!p.sg, status: status,
+      sections: String(p.b || "").split(",").filter(function (v) { return v !== ""; }).map(function (v, i) {
+        return { key: SECTION_KEYS[i], name: SECTION_NAMES[i], earned: Number(v), maximum: maxima[i] || 0, items: [] };
+      })
+    };
+  }
+  /* "percent,orders,consistency,spotAnswered,spotRequested,trend" */
+  function offlineStats(ks) {
+    if (!ks) return null;
+    var a = String(ks).split(",");
+    var t = { i: "improving", s: "steady", d: "slipping" }[a[5]] || "";
+    return { percent: Number(a[0]) || 0, orders: Number(a[1]) || 0, consistency: Number(a[2]) || 0,
+      spotAnswered: Number(a[3]) || 0, spotRequested: Number(a[4]) || 0, trend: t };
   }
 
   function demoOrder() {
@@ -364,8 +473,42 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     return {
       demo: true, kitchenName: "Biryani Box", kitchenLocality: "HSR Layout", kitchenCity: "Bengaluru",
       fssai: "11223344556677", gstin: "29ABCDE1234F1ZW", platform: "Swiggy", orderRef: "158823344471", orderRefLast4: "4471", packerName: "Asha",
-      foodType: "Hot", tempC: 71, tempOk: true, score: 90, packedAtMillis: p, clipUrl: "", snapshot: snap
+      foodType: "Hot", tempC: 71, tempOk: true, score: 90, scoreComplete: true, safetyGatePassed: true,
+      kitchenId: "demo", fssaiHygieneRating: "4", fssaiAuditDate: "14-03-2026", notStocked: [],
+      kitchenStats: { orders: 212, percent: 92, consistency: 96, spotAnswered: 9, spotRequested: 10, feedbackCount: 64, sealIntactPct: 97, foodHotPct: 92, trend: "improving" },
+      verifiedVisit: { date: new Date(now - 12 * 24 * HOUR).toISOString().slice(0, 10), by: "KitchenLens" },
+      scoreBreakdown: { version: 2, complete: true, safetyGatePassed: true, status: "rated", sections: [
+        { key: "INVENTORY", name: "Food inventory details", earned: 24, maximum: 32, items: [
+          { name: "Vegetables", earned: 5, maximum: 5, note: "Photos recorded 7 h ago" },
+          { name: "Meat & Fish", earned: 5, maximum: 5, note: "Photos recorded 5 h ago" },
+          { name: "Dairy", earned: 0, maximum: 3, note: "Photos not recorded" },
+          { name: "Spices", earned: 2, maximum: 3, note: "Half credit: photos recorded 9 days ago (full credit for 7 days)" },
+          { name: "Cooking oil", earned: 3, maximum: 6, note: "Half credit: photos recorded 9 days ago (full credit for 7 days)" },
+          { name: "Grains & Pulses", earned: 2, maximum: 3, note: "Half credit: photos recorded 10 days ago (full credit for 7 days)" },
+          { name: "Supplier bills", earned: 7, maximum: 7, note: "Bill recorded 7 h ago" } ] },
+        { key: "UTENSILS", name: "Cooking utensils cleaning", earned: 15, maximum: 15, items: [
+          { name: "Cleaning methods (3 or more for full points)", earned: 5, maximum: 5, note: "3 method(s) · record recorded 2 h ago" },
+          { name: "Wash video", earned: 10, maximum: 10, note: "Video recorded 2 h ago" } ] },
+        { key: "STAFF", name: "Chef and support-staff hygiene", earned: 14, maximum: 15, items: [
+          { name: "Hygiene checks shown (1 point each)", earned: 4, maximum: 5, note: "4 of 5 checks · record recorded 3 h ago" },
+          { name: "Hand-wash and kit video", earned: 10, maximum: 10, note: "Video recorded 3 h ago" } ] },
+        { key: "PEST", name: "Pest control", earned: 14, maximum: 15, items: [
+          { name: "Pest-control vendor", earned: 3, maximum: 3, note: "Valid until next service" },
+          { name: "Service recency", earned: 3, maximum: 4, note: "Serviced within the last 14 days" },
+          { name: "Service report photo", earned: 8, maximum: 8, note: "Valid until next service" } ] },
+        { key: "PACKING", name: "Food packing and temperature", earned: 23, maximum: 23, items: [
+          { name: "Food temperature at packing", earned: 8, maximum: 8, note: "Guideline met (71°C)" },
+          { name: "Packing video", earned: 15, maximum: 15, note: "Packing video linked" } ] }
+      ] }, packedAtMillis: p, clipUrl: "", snapshot: snap
     };
+  }
+
+  function demoVariant(o, v) {
+    if (v === "withheld") { o.tempC = 58; o.tempOk = false; o.score = 82; o.safetyGatePassed = false; o.scoreBreakdown.safetyGatePassed = false; o.scoreBreakdown.status = "withheld"; }
+    else if (v === "incomplete") { o.score = 64; o.scoreComplete = false; o.scoreBreakdown.complete = false; o.scoreBreakdown.status = "incomplete"; }
+    else if (v === "legacy") { o.scoreBreakdown = null; o.scoreComplete = undefined; o.kitchenStats = null; o.verifiedVisit = null; }
+    else if (v === "new") { o.kitchenStats = { orders: 3, percent: 0 }; o.verifiedVisit = null; o.fssaiHygieneRating = ""; }
+    return o;
   }
 
   function beforePacking(at, packed) {
@@ -580,6 +723,118 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     });
   }
 
+  /* ---------- Hygiene rating display (same words as the apps) ---------- */
+  function starsOf(pct) { return Math.round(Math.max(0, Math.min(100, pct)) / 10) / 2; }
+  function ratingWord(pct) { return pct >= 90 ? "Excellent" : pct >= 80 ? "Very good" : pct >= 70 ? "Good" : pct >= 50 ? "Fair" : "Needs improvement"; }
+  function starMeter(stars, big) {
+    return '<span class="stars' + (big ? " big" : "") + '" style="--p:' + (stars / 5 * 100) + '%" role="img" aria-label="' +
+      esc(stars) + ' out of 5 stars">★★★★★</span>';
+  }
+  function withheldText(foodType) { return foodType === "Cold" ? "Food above 5°C at packing" : "Food below 65°C at packing"; }
+  /* "rated", "withheld", "incomplete" or "legacy" (seal issued before the rating system) */
+  function ratingState(o) {
+    var b = o.scoreBreakdown;
+    if (!b || (typeof b === "object" && !Object.keys(b).length)) return "legacy";
+    if (b.status === "rated" || b.status === "withheld" || b.status === "incomplete") return b.status;
+    var complete = o.scoreComplete === true || b.complete === true;
+    var gate = o.safetyGatePassed === true || b.safetyGatePassed === true;
+    return !complete ? "incomplete" : !gate ? "withheld" : "rated";
+  }
+  function parseDay(v) {
+    if (v == null || v === "") return 0;
+    if (typeof v === "number") return v;
+    var m = String(v).match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])).getTime();
+    var t = Date.parse(v);
+    return isNaN(t) ? 0 : t;
+  }
+  function dayText(t) { return new Date(t).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }); }
+
+  function chipHtml(o, state, pct) {
+    if (state === "rated") {
+      var st = starsOf(pct);
+      return '<a class="rating-chip" href="#breakdown" aria-label="Hygiene rating ' + st + ' out of 5, ' + esc(ratingWord(pct)) + '. See how it was worked out.">' +
+        '<span class="rating-kicker">Hygiene rating</span>' +
+        '<span class="rating-row"><span class="rating-num">' + st.toFixed(1) + '</span>' + starMeter(st) + '</span>' +
+        '<span class="rating-name">' + esc(ratingWord(pct)) + '</span></a>';
+    }
+    var cls = state === "withheld" ? "review" : state === "incomplete" ? "pending" : "legacy";
+    var name = state === "withheld" ? "Rating withheld" : "Not rated";
+    var sub = state === "withheld" ? withheldText(o.foodType) : state === "incomplete" ? "Some hygiene records missing" : "Issued before the rating system";
+    return '<a class="rating-chip ' + cls + '" href="' + (state === "legacy" ? "#about-rating" : "#breakdown") + '">' +
+      '<span class="rating-kicker">Hygiene rating</span><span class="rating-name">' + esc(name) + '</span><span class="rating-sub">' + esc(sub) + '</span></a>';
+  }
+
+  /* The kitchen's 30-day rating: helps customers choose a kitchen, not just judge one order */
+  function kitchenCardHtml(o, ks, visit, code) {
+    ks = ks || null;
+    var head = '<div class="sectionhead"><div><h2>Kitchen hygiene rating · last 30 days</h2><p>Combines every sealed order from this kitchen, not just yours.</p></div></div>';
+    if (!ks) return "";
+    var body;
+    if ((ks.orders || 0) < 5) {
+      body = '<div class="notice">New kitchen on KitchenLens: a 30-day rating is shown after 5 sealed orders (' + esc(ks.orders || 0) + ' so far).</div>';
+    } else {
+      var st = starsOf(ks.percent || 0);
+      var metrics = [
+        '<div class="kmetric"><strong>' + esc(ks.consistency || 0) + '%</strong>of orders sealed with complete proof and a passed temperature check</div>',
+        ks.spotRequested ? '<div class="kmetric"><strong>' + esc(ks.spotAnswered || 0) + ' of ' + esc(ks.spotRequested) + '</strong>surprise spot checks answered within 30 minutes</div>' : "",
+        ks.sealIntactPct != null ? '<div class="kmetric"><strong>' + esc(ks.sealIntactPct) + '%</strong>of customers found the seal intact (' + esc(ks.feedbackCount || 0) + ' answers)</div>' : "",
+        ks.foodHotPct != null ? '<div class="kmetric"><strong>' + esc(ks.foodHotPct) + '%</strong>of customers said the food arrived at the right temperature</div>' : ""
+      ].join("");
+      body = '<div class="krow"><span class="knum">' + st.toFixed(1) + '</span>' + starMeter(st, true) +
+        '<span><span class="kword">' + esc(ratingWord(ks.percent || 0)) + '</span><br><span class="muted small">' + esc(ks.orders) + ' sealed orders' +
+        (ks.trend ? ' · ' + esc(ks.trend) : '') + '</span></span></div>' + (metrics ? '<div class="kmetrics">' + metrics + '</div>' : "");
+    }
+    var visitAt = visit ? parseDay(visit.date) : 0;
+    var visitHtml = visitAt && Date.now() - visitAt < 60 * 24 * HOUR
+      ? '<div><span class="verified">✓ Verified visit by ' + esc(visit.by || "KitchenLens") + ' · ' + esc(dayText(visitAt)) + '</span></div>' : "";
+    var link = o.kitchenId && !o.demo && !o.offline && CFG.projectId && CFG.projectId !== "kitchenlens-demo"
+      ? '<a href="kitchen.html?k=' + encodeURIComponent(o.kitchenId) + '">See this kitchen’s profile</a>' : "";
+    return head + '<div class="kcard">' + body + visitHtml + link + '</div>';
+  }
+
+  /* Official FSSAI Hygiene Rating, shown only as the kitchen's own declaration */
+  function declaredFssaiHtml(o) {
+    if (!o.fssaiHygieneRating) return "";
+    var at = parseDay(o.fssaiAuditDate);
+    var old = at && Date.now() - at > 730 * 24 * HOUR;
+    return '<div class="declared">FSSAI Hygiene Rating: <strong>' + esc(o.fssaiHygieneRating) + ' of 5</strong> — declared by the kitchen' +
+      (at ? ', audited ' + esc(dayText(at)) : '') + (old ? ' <span class="bad">(audit over 2 years old)</span>' : '') +
+      '. <a href="https://foscos.fssai.gov.in/" target="_blank" rel="noopener">Check on FSSAI FoSCoS</a></div>';
+  }
+
+  function feedbackHtml(o, code) {
+    if (o.offline) return "";
+    var hot = o.foodType === "Cold" ? "Was the cold food still cold?" : "Was the hot food still hot?";
+    return '<section class="card fb" id="fb"><div class="sectionhead"><div><h2>Help other customers</h2><p>Two quick taps. Your answers appear in this kitchen’s 30-day rating. One answer per seal.</p></div></div>' +
+      '<div class="fbq"><span>Was the seal intact when your order arrived?</span><span class="opts"><button type="button" data-q="seal" data-v="1" aria-pressed="false">Yes</button><button type="button" data-q="seal" data-v="0" aria-pressed="false">No</button></span></div>' +
+      '<div class="fbq"><span>' + esc(hot) + '</span><span class="opts"><button type="button" data-q="hot" data-v="1" aria-pressed="false">Yes</button><button type="button" data-q="hot" data-v="0" aria-pressed="false">No</button></span></div>' +
+      '<div><button type="button" class="btn primary" id="fb-send" disabled>Send answers</button></div><p class="small muted" id="fb-msg" aria-live="polite"></p></section>';
+  }
+  function wireFeedback(o, code) {
+    var box = document.getElementById("fb");
+    if (!box) return;
+    var key = "kl_fb_" + code, answers = {};
+    var msg = document.getElementById("fb-msg"), send = document.getElementById("fb-send");
+    function done(text) { box.querySelectorAll("button").forEach(function (b) { b.disabled = true; }); msg.textContent = text; }
+    try { if (localStorage.getItem(key)) { done("Thanks, your answers for this seal were sent."); return; } } catch (e) {}
+    box.querySelectorAll("button[data-q]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        answers[b.getAttribute("data-q")] = b.getAttribute("data-v") === "1";
+        box.querySelectorAll('button[data-q="' + b.getAttribute("data-q") + '"]').forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); });
+        send.disabled = !("seal" in answers && "hot" in answers);
+      });
+    });
+    send.addEventListener("click", function () {
+      if (o.demo) { done("Thanks! This is a sample report, so nothing was sent. On real seals the answers count towards the kitchen’s rating."); return; }
+      send.disabled = true; msg.textContent = "Sending…";
+      sendFeedback(code, o.kitchenId || "", answers.seal, answers.hot).then(function (r) {
+        try { localStorage.setItem(key, "1"); } catch (e) {}
+        done(r === "duplicate" ? "Answers for this seal were already sent. Thank you." : "Thanks, your answers were sent.");
+      }).catch(function () { send.disabled = false; msg.textContent = "Could not send right now. Check your internet connection and try again."; });
+    });
+  }
+
   function render(o, code) {
     var app = document.getElementById("app");
     var snap = o.snapshot || {};
@@ -605,7 +860,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     if (!Number.isFinite(scoreValue)) scoreValue = 0;
     scoreValue = Math.max(0, Math.min(100, Math.round(scoreValue)));
     var scoreTone = tone(scoreValue);
-    var scoreLabel = scoreValue >= 80 ? "Higher recorded indicators" : scoreValue >= 50 ? "Some checks need attention" : "Limited recorded indicators";
+    var breakdown = o.scoreBreakdown || {};
+    var state = ratingState(o);
+    var ratingName = ratingWord(scoreValue);
+    var ratingReady = state === "rated";
+    var scoreLabel = state === "rated" ? ratingName + " · " + starsOf(scoreValue).toFixed(1) + " of 5 stars"
+      : state === "withheld" ? "Rating withheld: " + withheldText(o.foodType)
+      : state === "incomplete" ? "Not rated: some hygiene records were missing at packing"
+      : "Not rated: this seal was issued before the rating system";
     var displayOrder = o.orderRefLast4 ? "•••• " + String(o.orderRefLast4).slice(-4)
       : o.orderRef ? "•••• " + String(o.orderRef).slice(-4) : "Not provided";
     var kitchenLocation = [o.kitchenLocality, o.kitchenCity].filter(Boolean).join(", ");
@@ -628,11 +890,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
       (o.offline && !o.hasCloud ? '<div class="demo">Some media is stored on the kitchen device and may not be visible until cloud storage is connected.</div>' : "") +
       '<section class="card reporthead">' +
         '<div class="brandbar"><div class="brandmark"><div class="brandicon" aria-hidden="true">K</div><div><div class="brandname">KitchenLens</div><div class="brandtag">Food Safety &amp; Hygiene Verification</div></div></div>' +
-        '<span class="status-pill">Seal record</span></div>' +
+        chipHtml(o, state, scoreValue) + '</div>' +
         '<div class="kitchenrow"><div class="kitchen"><div class="eyebrow">Prepared by</div><h1>' + esc(o.kitchenName || "Kitchen team") + '</h1>' +
           '<div class="kitchenmeta">' + esc(kitchenLocation || "Location not provided") + '</div>' +
           (o.fssai ? '<div class="kitchenmeta">FSSAI licence: <span class="mono">' + esc(o.fssai) + "</span></div>" : "") +
           (o.gstin ? '<div class="kitchenmeta">GSTIN: <span class="mono">' + esc(o.gstin) + "</span></div>" : "") +
+          declaredFssaiHtml(o) +
         '</div><div class="sealcode"><div><div class="eyebrow">Seal reference</div><div class="mono">' + esc(code) + '</div></div></div></div>' +
         '<div class="reporttitle"><div class="eyebrow">Your order, transparently packed</div><p>This report summarises the preparation and hygiene records the kitchen had logged when your order was packed.</p></div>' +
         '<div class="orderfacts">' +
@@ -644,6 +907,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
           '<div class="fact"><div class="label">Record status</div><div class="value">Kitchen-recorded</div></div>' +
         '</div>' +
       '</section>' +
+      '<section class="card" id="kitchen-card"' + (o.kitchenStats ? '' : ' hidden') + '>' + kitchenCardHtml(o, o.kitchenStats, o.verifiedVisit, code) + '</section>' +
       '<section class="card"><div class="sectionhead"><div><h2>Packing evidence</h2><p>Recorded video of the packing process, where available.</p></div><span class="pill">No audio</span></div>' +
         '<figure class="clip video" style="margin:0">' + clip +
           '<figcaption><span><strong>Hygiene Food Packing clip</strong><br><span class="muted">Video is recorded without sound</span></span><span class="muted small">' + esc(o.platform || "Order") + ' · ' + esc(displayOrder) + '</span></figcaption></figure>' +
@@ -652,18 +916,36 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
         '<div class="stat"><div class="stathead"><span class="eyebrow">Temperature at packing</span><span class="pill ' + tempTone + '">' + esc(tempStatus) + '</span></div>' +
           '<div class="v ' + tempTone + '">' + (Number.isFinite(Number(o.tempC)) ? esc(Number(o.tempC).toFixed(1).replace(/\.0$/, "")) + "°C" : "Not recorded") + '</div>' +
           '<div class="l">' + esc(tempNote) + '</div><div class="hint">Food type: ' + esc(foodType) + '. This is a recorded handling check, not a laboratory test.</div></div>' +
-        '<div class="stat"><div class="stathead"><span class="eyebrow">Hygiene record score</span><span class="pill ' + scoreTone + '">' + esc(scoreLabel) + '</span></div>' +
-          '<div class="v ' + scoreTone + '">' + esc(scoreValue) + '<span class="small muted"> / 100</span></div>' +
-          '<div class="l">Kitchen process-record indicator at packing</div><div class="hint">This score reflects recorded checks and freshness of records; it is not a food-safety certification or a guarantee of the meal.</div></div>' +
+        '<div class="stat"><div class="stathead"><span class="eyebrow">Order rating</span><span class="pill ' + (ratingReady ? scoreTone : state === "withheld" ? "bad" : "warn") + '">' +
+            esc(ratingReady ? ratingName : state === "withheld" ? "Withheld" : "Not rated") + '</span></div>' +
+          '<div class="v ' + (ratingReady ? scoreTone : state === "withheld" ? 'bad' : 'warn') + '">' + (ratingReady ? starsOf(scoreValue).toFixed(1) + ' ' + starMeter(starsOf(scoreValue)) : (state === "withheld" ? "Withheld" : "Not rated")) + '</div>' +
+          '<div class="l">' + esc(scoreLabel) + '</div><div class="hint">Worked out by KitchenLens from the kitchen’s own photos, clips and checks. It is not an inspection, laboratory result or guarantee of the meal.</div></div>' +
       '</section>' +
       '<section class="card"><div class="sectionhead"><div><h2>Preparation & hygiene timeline</h2><p>Records shown in time order. Open an item to view its available evidence.</p></div></div>' +
         (rows.length ? '<ol class="timeline">' + timeline + '</ol>' : '<div class="notice">No earlier hygiene records were linked to this order at the time the report was created. Please contact the kitchen if you need clarification.</div>') +
       '</section>' +
+      (breakdown.sections && breakdown.sections.length ? '<section class="card" id="breakdown"><div class="sectionhead"><div><h2>How this rating was worked out</h2><p>Points come from photos, clips, checks, bills and the packing temperature. Old records lose points: shift records after 12 hours, perishables after 48 hours, dry goods after 7 days. Names and shifts are required but earn no points. Tap a section for details.</p></div></div>' +
+        '<div class="score-sections">' + breakdown.sections.map(function (s) {
+          var earned = Math.max(0, Number(s.earned) || 0), maximum = Math.max(1, Number(s.maximum) || 1);
+          var items = Array.isArray(s.items) ? s.items : [];
+          return '<details class="score-section"><summary><span>' + esc(s.name || s.key || "Section") + '</span><span class="score-points">' + esc(earned) + ' of ' + esc(maximum) + ' points</span></summary>' +
+            '<div class="score-bar"><span style="width:' + Math.max(0, Math.min(100, earned / maximum * 100)) + '%"></span></div>' +
+            (items.length ? items.map(function (it) { return '<div class="score-item"><span>' + esc(it.name || "Check") + '</span><strong>' + esc(Number(it.earned) || 0) + ' / ' + esc(Number(it.maximum) || 0) + '</strong>' + (it.note ? '<span class="item-note">' + esc(it.note) + '</span>' : '') + '</div>'; }).join("") : '<div class="small muted">Item details are not stored inside this seal’s QR code.</div>') +
+            '</details>';
+        }).join("") + '</div>' +
+        ((o.notStocked && o.notStocked.length) ? '<div class="notice" style="margin-top:12px">Not stocked by this kitchen, so left out of the rating: ' + esc(o.notStocked.join(", ")) + '.</div>' : '') +
+        '<div class="score-total"><span>Total</span><span>' + (ratingReady ? esc(scoreValue) + '% · ' + starsOf(scoreValue).toFixed(1) + ' stars' : (state === "withheld" ? 'Withheld' : 'Not rated')) + '</span></div>' +
+        '<div class="rating-legend"><div><span>Excellent</span><strong>90–100% · 4.5–5 ★</strong></div><div><span>Very good</span><strong>80–89% · 4–4.5 ★</strong></div><div><span>Good</span><strong>70–79% · 3.5–4 ★</strong></div><div><span>Fair</span><strong>50–69% · 2.5–3.5 ★</strong></div><div><span>Needs improvement</span><strong>below 50%</strong></div></div>' +
+        (state === "withheld" ? '<div class="notice" style="margin-top:12px">' + esc(withheldText(o.foodType)) + ', so no star rating is given for this order. The kitchen recorded the reading shown above.</div>' : '') +
+        (state === "incomplete" ? '<div class="notice" style="margin-top:12px">A star rating is given only when all five hygiene sections were recorded before packing.</div>' : '') +
+      '</section>' : '<section class="card" id="about-rating"><div class="sectionhead"><div><h2>About the hygiene rating</h2><p>This seal was issued before KitchenLens started rating orders, so it has no star rating. Newer seals from this kitchen show one.</p></div></div></section>') +
       '<section class="card"><div class="sectionhead"><div><h2>Before you enjoy your meal</h2><p>A few quick checks to help you verify the package.</p></div></div>' +
         '<div class="notice">• Check that the bag seal is intact and the printed seal reference matches this report.<br>• Follow the storage and consumption instructions on the food label.<br>• If the seal is broken, the order details look incorrect, or you have a concern, contact the kitchen using the details below.</div>' +
       '</section>' +
+      feedbackHtml(o, code) +
       '<div class="reportactions"><button class="btn primary" type="button" id="print-report">Print / Save as PDF</button><button class="btn" type="button" id="back-top">Back to top</button></div>' +
       '<footer class="footer"><strong>About this report</strong><span>This page presents the kitchen’s own recorded preparation and packing process. It is provided for transparency and does not constitute independent inspection, laboratory testing, or regulatory certification.</span>' +
+        '<span>The KitchenLens star rating is worked out by KitchenLens from the kitchen’s recorded evidence. It is not the FSSAI Hygiene Rating and is not issued or endorsed by FSSAI.</span>' +
         (CFG.supportEmail ? '<span>Questions or concerns? <a href="mailto:' + esc(CFG.supportEmail) + '?subject=KitchenLens%20seal%20' + encodeURIComponent(code) + '">' + esc(CFG.supportEmail) + '</a> · Please quote seal reference <span class="mono">' + esc(code) + '</span>.</span>' : '') +
         '<span>Report generated for this seal reference: <span class="mono">' + esc(code) + '</span>.</span></footer>';
 
@@ -679,6 +961,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
       });
     });
     wireStamps(app);
+    wireFeedback(o, code);
+    // Live seals: replace the 30-day snapshot with the kitchen's current rating and any verified visit
+    if (o.kitchenId && !o.demo && !o.offline && configured) {
+      fetchDoc("publicKitchens/" + encodeURIComponent(o.kitchenId)).then(function (pk) {
+        if (!pk) return;
+        var box = document.getElementById("kitchen-card");
+        var html = kitchenCardHtml(o, pk.stats || o.kitchenStats, pk.verifiedVisit, code);
+        if (box && html) { box.innerHTML = html; box.hidden = false; }
+      }).catch(function () {});
+    }
     lbInit();
     wireThumbs(app, rows);
     var printButton = document.getElementById("print-report");
@@ -731,7 +1023,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     return;
   }
   if (code === "DEMO" || (!configured && code)) {
-    render(demoOrder(), code === "DEMO" || !code ? "DEMO2026" : code);
+    render(demoVariant(demoOrder(), params.get("s")), code === "DEMO" || !code ? "DEMO2026" : code);
     return;
   }
   if (!configured) { render(demoOrder(), "DEMO2026"); return; }

@@ -142,8 +142,8 @@ thermal-printer app (58 mm labels) and stick it across the bag opening.
 - Duplicate-photo detection compares each new photo with the kitchen's last 60.
 - On-device text recognition reads the date from supplier bills.
 - Temperature check: hot food at 65°C or above (FSSAI guideline), cold food at 5°C or below; a warning only.
-- Hygiene score (0–100): five pillars of 20 points each (utensils, staff, pest control,
-  perishable delivery, temperature), frozen at the moment of packing.
+- Hygiene rating: points for proof (photos, clips, checks, bills, temperature), with old records
+  expiring, shown to customers as stars out of 5. See [`docs/hygiene-scoring-rubric.md`](docs/hygiene-scoring-rubric.md).
 - Clips are recorded **without sound**, so recipe discussions are never captured.
 - Records can be added but never edited or deleted (enforced by the database rules).
 - The customer sees only the last 4 digits of the order number and the packer's first name.
@@ -286,3 +286,45 @@ Before production use, review the temperature acceptance criteria against the ki
   tapping one opens a full-screen viewer with pinch / double-tap / +/− zoom, swipe or arrows to
   move between photos, and "Open original". The app's "Preview what the customer sees" works the
   same way. The sample report (`?c=DEMO`) includes sample photos to try it.
+
+
+## Hygiene rating, version 2 (stars, expiry, kitchen rating)
+
+Full rules: [`docs/hygiene-scoring-rubric.md`](docs/hygiene-scoring-rubric.md). Same logic in both apps.
+
+**What customers see**
+- **Top right of every report (phones too):** this order's rating as stars with a word, e.g.
+  "4.5 ★★★★½ Excellent". Tapping it jumps to "How this rating was worked out".
+  - Food below 65°C (or cold food above 5°C): "Rating withheld – Food below 65°C at packing", no percentage.
+  - A hygiene section never recorded: "Not rated – Some hygiene records missing".
+  - Older seals: "Not rated – Issued before the rating system".
+- **Kitchen hygiene rating · last 30 days** card: stars, number of sealed orders, trend
+  (improving / steady / slipping), share of orders with complete proof, spot checks answered,
+  customer answers ("seal intact", "food at the right temperature"), and a **Verified visit** badge.
+- **Kitchen page** (`kitchen.html?k=<kitchenId>`): public profile with the 30-day rating.
+- **FSSAI Hygiene Rating**, when the kitchen enters it, shown as "declared by the kitchen" with a
+  link to FSSAI FoSCoS. Every page says the KitchenLens rating is not an FSSAI rating.
+- **Help other customers**: two yes/no questions after delivery, one answer per seal (live mode).
+- Try every state on the sample report: `?c=DEMO`, `?c=DEMO&s=withheld`, `&s=incomplete`, `&s=legacy`, `&s=new`.
+
+**What changed in the apps**
+- Home shows **"Next order's rating"** with the top 3 things to record to gain points, and the
+  kitchen's 30-day rating. Status dots now follow the expiry rules (12 h shifts, 48 h perishables,
+  7 days dry goods).
+- Names, shift, staff count and "Bought from" are required but earn no points.
+- **Kitchen details:** "Inventory you never stock" (left out of the rating), official FSSAI Hygiene
+  Rating and audit date, and **Share hygiene badge** (an image with the 30-day rating and a QR to the
+  kitchen page, for Swiggy/Zomato menu photos, Instagram and Google listings).
+- **Spot check:** once a day, at a random time between 11:00 and 21:30, Home shows "Spot check now".
+  Recording the 10-second clip within 30 minutes raises the kitchen rating.
+
+**Firebase (live mode) — deploy again:** `firebase deploy --only firestore,hosting`. This adds the
+`publicKitchens` and `feedback` rules, the feedback index and `kitchen.html`.
+
+**Giving a kitchen a Verified visit** (KitchenLens staff, after a paid audit): Firebase console →
+Firestore → `publicKitchens` → the kitchen's document → add field `verifiedVisit` (map) with
+`date` = `2026-10-07` (string) and `by` = `KitchenLens`. Kitchens cannot set or change this field.
+It shows on reports and the kitchen page for 60 days.
+
+The rating measures recorded process evidence. It is not an inspection and not a guarantee that
+a meal is safe.

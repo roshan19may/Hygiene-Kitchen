@@ -4,6 +4,14 @@ private let hints: [Section: String] = [
     .UTENSILS: "Record the wash: scrubbing, rinsing in hot water or sanitiser, and the drying rack.",
     .STAFF: "Record each staff member washing hands with soap, then show cap, gloves and apron.",
     .PEST: "Photograph the pest-control service report showing the vendor and date.",
+    .SPOT: "Spot check: slowly show the wash area, then the packing table, for about 10 seconds.",
+]
+
+private let weightNotes: [Section: String] = [
+    .UTENSILS: "Worth 15 points: cleaning methods 5 (3 or more), wash video 10. Full points for 12 hours (one shift), half points up to 24 hours, then 0. Name and shift are required but earn no points.",
+    .STAFF: "Worth 15 points: 1 per hygiene check shown (up to 5), video 10. Full points for 12 hours (one shift), half points up to 24 hours, then 0. Name, shift and staff count are required.",
+    .PEST: "Worth 15 points: vendor 3, service recency 1–4, report photo 8. Counts until the next service date, half points for 7 days after it, then 0.",
+    .SPOT: "The app asks for one spot check a day at a random time. Recording it within 30 minutes raises your kitchen's 30-day rating.",
 ]
 
 /// Cooking utensils, staff hygiene and pest control (inventory has its own screen).
@@ -64,7 +72,8 @@ struct SectionView: View {
             case .UTENSILS: return media.isEmpty ? "Choose the cleaning medium used" : (shift.isEmpty ? "Choose the shift" : nil)
             case .STAFF:
                 if checklist.count < MIN_STAFF_CHECKS { return "Select at least \(MIN_STAFF_CHECKS) hygiene checks (\(checklist.count) selected)" }
-                return shift.isEmpty ? "Choose the shift" : nil
+                if shift.isEmpty { return "Choose the shift" }
+                return staffCount.trimmingCharacters(in: .whitespaces).isEmpty ? "Enter the number of staff on shift" : nil
             case .PEST:
                 if vendor.trimmingCharacters(in: .whitespaces).isEmpty { return "Enter the pest-control vendor" }
                 return Dates.parse(serviceDate) == nil ? "Service date must be dd-mm-yyyy" : nil
@@ -118,13 +127,14 @@ struct SectionView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 Text(section.subtitle).font(.subheadline)
+                if let w = weightNotes[section] { Text(w).font(.caption).foregroundColor(.secondary) }
                 switch section {
                 case .UTENSILS:
-                    ChipPicker(label: "Cleaning medium used", options: CLEANING_MEDIA, selected: $media, multi: true)
-                    ChipPicker(label: "Shift", options: SHIFTS, selected: $shift)
+                    ChipPicker(label: "Cleaning medium used (5 points for 3 or more)", options: CLEANING_MEDIA, selected: $media, multi: true)
+                    ChipPicker(label: "Shift (required)", options: SHIFTS, selected: $shift)
                 case .STAFF:
                     Card {
-                        Text("Checks shown in the clip (select at least \(MIN_STAFF_CHECKS))").font(.subheadline.weight(.semibold))
+                        Text("Checks shown in the clip (1 point each; at least \(MIN_STAFF_CHECKS))").font(.subheadline.weight(.semibold))
                         ForEach(STAFF_CHECKLIST, id: \.self) { item in
                             Toggle(item, isOn: Binding(
                                 get: { checklist.contains(item) },
@@ -135,17 +145,18 @@ struct SectionView: View {
                              (checklist.count < MIN_STAFF_CHECKS ? ": select \(MIN_STAFF_CHECKS - checklist.count) more" : ""))
                             .font(.caption).foregroundColor(checklist.count < MIN_STAFF_CHECKS ? Brand.chilli : Brand.ok)
                     }
-                    ChipPicker(label: "Shift", options: SHIFTS, selected: $shift)
-                    TextField("Staff on this shift", text: $staffCount).keyboardType(.numberPad).textFieldStyle(.roundedBorder)
+                    ChipPicker(label: "Shift (required)", options: SHIFTS, selected: $shift)
+                    TextField("Staff on this shift (required)", text: $staffCount).keyboardType(.numberPad).textFieldStyle(.roundedBorder)
                 case .PEST:
-                    TextField("Pest-control vendor", text: $vendor).textFieldStyle(.roundedBorder)
-                    TextField("Service date (dd-mm-yyyy)", text: $serviceDate).textFieldStyle(.roundedBorder)
+                    TextField("Pest-control vendor (3 points)", text: $vendor).textFieldStyle(.roundedBorder)
+                    TextField("Service date (dd-mm-yyyy; 1–4 points by recency)", text: $serviceDate).textFieldStyle(.roundedBorder)
                     ChipPicker(label: "Next service due in (days)", options: ["15", "30", "60", "90"], selected: $nextDueDays)
                 default: EmptyView()
                 }
 
                 Card {
-                    Text(section.media == .photo ? "Photo proof" : "Video proof (5–20 s, no sound)").font(.subheadline.weight(.semibold))
+                    Text(section == .PEST ? "Service report photo (8 points)" : section == .SPOT ? "Spot-check clip (about 10 s, no sound)"
+                         : section == .STAFF ? "Hand-wash and kit video (10 points; 5–20 s, no sound)" : "Wash video (10 points; 5–20 s, no sound)").font(.subheadline.weight(.semibold))
                     if let f = file {
                         if section.media == .photo, let img = UIImage(contentsOfFile: f.path) {
                             Image(uiImage: img).resizable().scaledToFill().frame(height: 200).frame(maxWidth: .infinity).clipped()
@@ -161,7 +172,7 @@ struct SectionView: View {
                     .buttonStyle(.bordered).disabled(working)
                 }
 
-                TextField("Recorded by (your name)", text: $staffName).textFieldStyle(.roundedBorder)
+                TextField("Recorded by (your name, required)", text: $staffName).textFieldStyle(.roundedBorder)
                 ErrorText(text: error)
                 if working && progress > 0 { ProgressView(value: progress) }
                 Button { submit() } label: { Text(working ? "Uploading…" : "Save proof").frame(maxWidth: .infinity) }

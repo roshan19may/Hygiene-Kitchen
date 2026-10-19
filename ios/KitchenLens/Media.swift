@@ -191,4 +191,38 @@ enum QrLabel {
             draw("Seal must be intact on delivery", y: 544, font: .systemFont(ofSize: 20))
         }
     }
+
+    /// Kitchen hygiene badge for Swiggy / Zomato menu photos, Instagram and Google listings.
+    /// The QR opens the kitchen's public page with its live 30-day rating.
+    static func badge(url: String, kitchenName: String, headline: String, detail: String) -> UIImage {
+        let size = CGSize(width: 720, height: 1000)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let green = UIColor(red: 23 / 255, green: 107 / 255, blue: 75 / 255, alpha: 1)
+        let ink = UIColor(red: 23 / 255, green: 43 / 255, blue: 36 / 255, alpha: 1)
+        let muted = UIColor(red: 98 / 255, green: 115 / 255, blue: 107 / 255, alpha: 1)
+        return UIGraphicsImageRenderer(size: size, format: format).image { ctx in
+            green.setFill()
+            ctx.fill(CGRect(origin: .zero, size: size))
+            UIColor.white.setFill()
+            UIBezierPath(roundedRect: CGRect(x: 30, y: 30, width: size.width - 60, height: size.height - 60), cornerRadius: 36).fill()
+            let center = NSMutableParagraphStyle()
+            center.alignment = .center
+            func draw(_ s: String, y: CGFloat, size fs: CGFloat, bold: Bool, color: UIColor) {
+                var f = fs
+                while f > 18 && (s as NSString).size(withAttributes: [.font: bold ? UIFont.boldSystemFont(ofSize: f) : UIFont.systemFont(ofSize: f)]).width > size.width - 100 { f -= 1 }
+                let font = bold ? UIFont.boldSystemFont(ofSize: f) : UIFont.systemFont(ofSize: f)
+                (s as NSString).draw(in: CGRect(x: 50, y: y, width: size.width - 100, height: font.lineHeight + 6),
+                                     withAttributes: [.font: font, .foregroundColor: color, .paragraphStyle: center])
+            }
+            draw("KITCHENLENS HYGIENE RATING", y: 70, size: 30, bold: true, color: muted)
+            draw(kitchenName, y: 120, size: 52, bold: true, color: ink)
+            draw(headline, y: 195, size: 56, bold: true, color: UIColor(red: 16 / 255, green: 84 / 255, blue: 58 / 255, alpha: 1))
+            draw(detail, y: 272, size: 28, bold: false, color: muted)
+            ctx.cgContext.interpolationQuality = .none
+            qrImage(url, size: 460)?.draw(in: CGRect(x: (size.width - 460) / 2, y: 340, width: 460, height: 460))
+            draw("Scan to see our kitchen's hygiene proof", y: 825, size: 30, bold: true, color: ink)
+            draw("Rating from recorded hygiene evidence · not an FSSAI rating", y: 880, size: 22, bold: false, color: muted)
+        }
+    }
 }

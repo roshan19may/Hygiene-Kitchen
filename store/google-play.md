@@ -21,6 +21,8 @@ Pack every order with a QR seal:
 
 Customers scan the seal and see a clear report: packing clip, temperature, hygiene timeline and photos with zoom. No app is needed to scan.
 
+A star hygiene rating on every report and a 30-day kitchen rating help customers choose kitchens with consistent hygiene. Share your hygiene badge on your menu photos and social media.
+
 Built for trust:
 • Photos and clips are captured live in the app; gallery uploads are not allowed
 • Every photo and clip carries its date and time

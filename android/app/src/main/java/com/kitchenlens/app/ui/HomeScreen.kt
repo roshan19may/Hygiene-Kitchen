@@ -58,7 +58,9 @@ import com.kitchenlens.app.data.INVENTORY_CATEGORIES
 import com.kitchenlens.app.data.Kitchen
 import com.kitchenlens.app.data.Section
 import com.kitchenlens.app.data.latestKey
+import com.kitchenlens.app.data.PERISHABLE_CATEGORIES
 import com.kitchenlens.app.util.HygieneScore
+import com.kitchenlens.app.util.SpotCheck
 
 /** Kitchen Hygiene proof sections with nothing recorded yet (inventory counts if any category is recorded). */
 private fun missingSections(k: Kitchen): List<Section> = listOfNotNull(
@@ -73,13 +75,20 @@ private data class Status(val color: Color, val text: String)
 private fun statusFor(kitchen: Kitchen, section: Section, now: Long): Status {
     val hour = 3_600_000L
     if (section == Section.INVENTORY) {
-        val entries = INVENTORY_CATEGORIES.mapNotNull { cat ->
+        val stocked = INVENTORY_CATEGORIES.filter { it !in kitchen.notStocked }
+        val entries = stocked.mapNotNull { cat ->
             (kitchen.latest[latestKey(section, cat)]?.get("at") as? Number)?.toLong()?.let { cat to it }
         }
         if (entries.isEmpty()) return Status(Chilli, "Not recorded yet")
+        // Same expiry as the rating: perishables 48 h, dry goods 7 days
+        val expired = entries.filter { (cat, at) ->
+            now - at > (if (cat in PERISHABLE_CATEGORIES) HygieneScore.PERISHABLE_FULL_H else HygieneScore.DRY_FULL_H) * hour
+        }
+        val missing = stocked.size - entries.size
+        val color = when { expired.isEmpty() && missing == 0 -> Ok; entries.size > expired.size -> Amber; else -> Chilli }
         val newest = entries.maxBy { it.second }
-        val color = if (now - newest.second <= section.freshForHours * hour) Ok else Amber
-        return Status(color, "${newest.first} ${timeAgo(newest.second, now)} · ${entries.size} categories logged")
+        return Status(color, "${newest.first} ${timeAgo(newest.second, now)} · ${entries.size - expired.size} of ${stocked.size} categories current" +
+            (if (expired.isNotEmpty()) " · expired: " + expired.joinToString { it.first } else ""))
     }
     val entry = kitchen.latest[section.name] ?: return Status(Chilli, "Not recorded yet")
     val at = (entry["at"] as? Number)?.toLong() ?: return Status(Chilli, "Not recorded yet")
@@ -95,11 +104,16 @@ private fun statusFor(kitchen: Kitchen, section: Section, now: Long): Status {
     }
     val age = now - at
     val color = when {
-        age <= section.freshForHours * hour -> Ok
-        age <= section.freshForHours * 2 * hour -> Amber
+        age <= HygieneScore.SHIFT_FULL_H * hour -> Ok
+        age <= HygieneScore.SHIFT_HALF_H * hour -> Amber
         else -> Chilli
     }
-    return Status(color, "Updated ${timeAgo(at, now)}")
+    val note = when {
+        age <= HygieneScore.SHIFT_FULL_H * hour -> ""
+        age <= HygieneScore.SHIFT_HALF_H * hour -> " · half points now, record again this shift"
+        else -> " · expired, earns 0 points: record again"
+    }
+    return Status(color, "Updated ${timeAgo(at, now)}$note")
 }
 
 @Composable
@@ -113,6 +127,12 @@ fun HomeScreen(
     val kitchen by vm.kitchen.collectAsStateWithLifecycle()
     val draft by vm.draft.collectAsStateWithLifecycle()
     val lastReset by vm.lastReset.collectAsStateWithLifecycle()
+    val stats by vm.kitchenStats.collectAsStateWithLifecycle()
+    // Re-check the clock every 30 s so the spot-check card appears and disappears on time
+    var tick by remember { mutableIntStateOf(0) }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        while (true) { kotlinx.coroutines.delay(30_000); tick++ }
+    }
     val scroll = rememberScrollState()
     val scope = rememberCoroutineScope()
     var proofSectionY by remember { mutableIntStateOf(0) }
@@ -171,8 +191,9 @@ fun HomeScreen(
         containerColor = MaterialTheme.colorScheme.background,
     ) { pad ->
         if (k == null) { CenteredLoading(); return@Scaffold }
-        val now = System.currentTimeMillis()
-        val readiness = HygieneScore.compute(k.latest, tempOk = true, now = now)
+        val now = tick.let { System.currentTimeMillis() }   // reading tick refreshes this every 30 s
+        val readiness = HygieneScore.readiness(k.latest, now, k.notStocked)
+        val spotWindow = SpotCheck.current(k.id, now)?.takeIf { !SpotCheck.answered(k.spotAnswers, it) }
         Column(
             Modifier.fillMaxSize().padding(pad).padding(horizontal = 16.dp).verticalScroll(scroll),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -202,6 +223,23 @@ fun HomeScreen(
                     }
                 }
             }
+            if (spotWindow != null) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Turmeric),
+                    modifier = Modifier.fillMaxWidth().clickable { onSection(Section.SPOT) },
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Spot check now", fontWeight = FontWeight.Bold, color = Color(0xFF3A2A00))
+                        Text(
+                            "Record a 10-second clip of your wash area and packing table. " +
+                                "${((spotWindow.last - now) / 60_000).coerceAtLeast(1)} min left. " +
+                                "Answered spot checks raise your kitchen rating.",
+                            color = Color(0xFF3A2A00), style = MaterialTheme.typography.bodySmall,
+                        )
+                        Button(onClick = { onSection(Section.SPOT) }, modifier = Modifier.fillMaxWidth()) { Text("Record spot check") }
+                    }
+                }
+            }
             if (k.gstin.isBlank()) {
                 Text(
                     "Tip: add your GST number in Kitchen details (shop icon above) so customers see it on every seal.",
@@ -212,11 +250,29 @@ fun HomeScreen(
 
             Card(colors = CardDefaults.cardColors(containerColor = Leaf)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Ready-to-pack score: $readiness / 100", color = Color.White, fontWeight = FontWeight.Bold)
                     Text(
-                        "Customers see this score on every order (temperature at 65°C or above, per FSSAI guideline, adds the last 20 points).",
+                        "Next order's rating: ${readiness.stars} ${HygieneScore.starText(readiness.stars)} ${readiness.rating} (${readiness.percent}%)",
+                        color = Color.White, fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        "This is what customers will see on the seal if the food is at 65°C or above (FSSAI guideline) and you record " +
+                            "the packing clip. Old records lose points: shift records after 12 h, perishables after 48 h.",
                         color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodySmall,
                     )
+                    readiness.tips().takeIf { it.isNotEmpty() }?.let { tips ->
+                        Text(
+                            "To gain points:\n" + tips.joinToString("\n") { "• $it" },
+                            color = Color.White, style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    stats?.let { st ->
+                        Text(
+                            "Kitchen rating (30 days): " + st.summary() +
+                                (if (st.spotRequested > 0) " · spot checks ${st.spotAnswered}/${st.spotRequested}" else ""),
+                            color = Color.White, style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.clickable { onEditKitchen() },
+                        )
+                    }
                     val d = draft
                     if (d != null) {
                         Text(

@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kitchen Hygiene Profile</title>
+<meta name="description" content="A kitchen's 30-day hygiene rating on KitchenLens, worked out from the photos, clips and checks it records for every sealed order.">
+<meta name="theme-color" content="#176b4b">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f7f5; --surface: #ffffff; --ink: #172b24; --muted: #62736b; --line: #dce6e0;
+  --brand: #176b4b; --brand-dark: #10543a; --brand-soft: #e8f4ed; --ok: #18794e; --bad: #b42318;
+  --shadow: 0 8px 28px rgba(23, 43, 36, .055);
+  --font: Inter, "Segoe UI", system-ui, sans-serif; --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font); padding: 24px 16px 48px; -webkit-font-smoothing: antialiased; }
+main { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+h1 { font-size: clamp(1.55rem, 5vw, 2rem); line-height: 1.15; letter-spacing: -.035em; margin: 4px 0 6px; }
+h2 { font-size: 1.1rem; margin: 0 0 4px; letter-spacing: -.015em; }
+p { margin: 0; }
+a { color: var(--brand); font-weight: 650; text-underline-offset: 3px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: clamp(16px, 4vw, 24px); box-shadow: var(--shadow); }
+.demo { background: #fff7e5; border: 1px solid #f0d79a; color: #624715; border-radius: 12px; padding: 12px 14px; font-size: .9rem; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brandicon { width: 38px; height: 38px; border-radius: 12px; background: var(--brand-soft); color: var(--brand); display: grid; place-items: center; font-weight: 800; }
+.eyebrow { font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 750; }
+.muted { color: var(--muted); } .small { font-size: .86rem; } .mono { font-family: var(--mono); }
+.meta { color: var(--muted); font-size: .88rem; }
+.declared { margin-top: 8px; font-size: .86rem; color: var(--muted); }
+.declared strong { color: var(--ink); }
+.stars { --p: 0%; display: inline-block; font-size: 1.7rem; line-height: 1; letter-spacing: 1px; white-space: nowrap;
+  background: linear-gradient(90deg, #e3a21a var(--p), #cfd8d3 var(--p)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.big { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 10px 0 4px; }
+.num { font-size: 2.6rem; font-weight: 850; letter-spacing: -.04em; line-height: 1; color: var(--brand-dark); }
+.word { font-weight: 800; font-size: 1.05rem; }
+.metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.metric { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #fbfdfb; font-size: .84rem; color: var(--muted); }
+.metric strong { display: block; color: var(--ink); font-size: 1.05rem; }
+.verified { display: inline-flex; gap: 6px; border-radius: 999px; padding: 6px 11px; background: #e7f5ec; color: var(--ok); font-weight: 800; font-size: .82rem; margin-top: 12px; }
+.notice { background: #f5f8f6; border: 1px solid var(--line); border-radius: 12px; padding: 13px 14px; font-size: .86rem; color: var(--muted); }
+ul.how { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: .88rem; }
+ul.how li { margin: 4px 0; }
+.footer { color: var(--muted); font-size: .82rem; display: flex; flex-direction: column; gap: 6px; padding: 2px; }
+@media (max-width: 520px) { body { padding: 14px 12px 32px; } .metrics { grid-template-columns: 1fr; } }
+</style>
+<script src="config.js"></script>
+</head>
+<body>
+<main id="app" aria-live="polite"><p class="muted">Loading kitchen…</p></main>
+<script>
+(function () {
+  "use strict";
+  var CFG = window.KL_CONFIG || {};
+  var DAY = 24 * 3600000;
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function starsOf(pct) { return Math.round(Math.max(0, Math.min(100, pct)) / 10) / 2; }
+  function word(pct) { return pct >= 90 ? "Excellent" : pct >= 80 ? "Very good" : pct >= 70 ? "Good" : pct >= 50 ? "Fair" : "Needs improvement"; }
+  function meter(st) { return '<span class="stars" style="--p:' + (st / 5 * 100) + '%" role="img" aria-label="' + st + ' out of 5 stars">★★★★★</span>'; }
+  function parseDay(v) {
+    if (v == null || v === "") return 0;
+    if (typeof v === "number") return v;
+    var m = String(v).match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1])).getTime();
+    var t = Date.parse(v); return isNaN(t) ? 0 : t;
+  }
+  function dayText(t) { return new Date(t).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }); }
+
+  function decode(v) {
+    if (!v) return null;
+    if ("stringValue" in v) return v.stringValue;
+    if ("integerValue" in v) return Number(v.integerValue);
+    if ("doubleValue" in v) return Number(v.doubleValue);
+    if ("booleanValue" in v) return v.booleanValue;
+    if ("nullValue" in v) return null;
+    if ("timestampValue" in v) return Date.parse(v.timestampValue);
+    if ("mapValue" in v) return fields(v.mapValue.fields || {});
+    if ("arrayValue" in v) return (v.arrayValue.values || []).map(decode);
+    return null;
+  }
+  function fields(f) { var o = {}; Object.keys(f).forEach(function (k) { o[k] = decode(f[k]); }); return o; }
+
+  /* Demo-mode badge links carry the profile: "z" + base64url(deflate-raw(json)) */
+  function unpack(s) {
+    if (!s || s.charAt(0) !== "z" || typeof DecompressionStream === "undefined") return Promise.reject(new Error("format"));
+    var b = s.slice(1).replace(/-/g, "+").replace(/_/g, "/");
+    while (b.length % 4) b += "=";
+    var bin = atob(b), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text().then(JSON.parse);
+  }
+  function fromPacked(p) {
+    var a = String(p.ks || "").split(",");
+    return {
+      offline: true, name: p.k, locality: p.a, city: "", fssai: p.f, gstin: p.g,
+      fssaiHygieneRating: p.fh || "", fssaiAuditDate: p.fa || "", notStocked: p.ns ? String(p.ns).split("|") : [],
+      updatedAt: (p.u || 0) * 60000,
+      stats: { percent: Number(a[0]) || 0, orders: Number(a[1]) || 0, consistency: Number(a[2]) || 0,
+        spotAnswered: Number(a[3]) || 0, spotRequested: Number(a[4]) || 0, trend: { i: "improving", s: "steady", d: "slipping" }[a[5]] || "" }
+    };
+  }
+  function sample() {
+    return {
+      demo: true, name: "Biryani Box", locality: "HSR Layout", city: "Bengaluru", fssai: "11223344556677", gstin: "29ABCDE1234F1ZW",
+      fssaiHygieneRating: "4", fssaiAuditDate: "14-03-2026", notStocked: [], updatedAt: Date.now() - 20 * 60000,
+      verifiedVisit: { date: new Date(Date.now() - 12 * DAY).toISOString().slice(0, 10), by: "KitchenLens" },
+      stats: { percent: 92, orders: 212, consistency: 96, spotAnswered: 9, spotRequested: 10, feedbackCount: 64, sealIntactPct: 97, foodHotPct: 92, trend: "improving" }
+    };
+  }
+
+  function render(k) {
+    var s = k.stats || {};
+    var eligible = (s.orders || 0) >= 5;
+    var st = starsOf(s.percent || 0);
+    var loc = [k.locality, k.city].filter(Boolean).join(", ");
+    var auditAt = parseDay(k.fssaiAuditDate);
+    var visitAt = k.verifiedVisit ? parseDay(k.verifiedVisit.date) : 0;
+    var metrics = [
+      '<div class="metric"><strong>' + esc(s.consistency || 0) + '%</strong>of orders sealed with complete proof and a passed temperature check</div>',
+      s.spotRequested ? '<div class="metric"><strong>' + esc(s.spotAnswered || 0) + ' of ' + esc(s.spotRequested) + '</strong>surprise spot checks answered within 30 minutes</div>' : "",
+      s.sealIntactPct != null ? '<div class="metric"><strong>' + esc(s.sealIntactPct) + '%</strong>of customers found the seal intact (' + esc(s.feedbackCount || 0) + ' answers)</div>' : "",
+      s.foodHotPct != null ? '<div class="metric"><strong>' + esc(s.foodHotPct) + '%</strong>of customers said the food arrived at the right temperature</div>' : ""
+    ].join("");
+    document.getElementById("app").innerHTML =
+      (k.demo ? '<div class="demo"><strong>Sample kitchen</strong> — illustrative data. Real kitchen pages open from the QR on a kitchen’s hygiene badge.</div>' : "") +
+      (k.offline ? '<div class="demo">This page was saved inside the badge’s QR code' + (k.updatedAt ? ' on ' + esc(dayText(k.updatedAt)) : '') + ', so it may not show the latest rating.</div>' : "") +
+      '<section class="card"><div class="brand"><div class="brandicon" aria-hidden="true">K</div><div><strong>KitchenLens</strong><div class="meta">Kitchen hygiene profile</div></div></div>' +
+        '<div class="eyebrow" style="margin-top:16px">Kitchen</div><h1>' + esc(k.name || "Kitchen") + '</h1>' +
+        '<div class="meta">' + esc(loc || "Location not provided") + '</div>' +
+        (k.fssai ? '<div class="meta">FSSAI licence: <span class="mono">' + esc(k.fssai) + '</span></div>' : '') +
+        (k.gstin ? '<div class="meta">GSTIN: <span class="mono">' + esc(k.gstin) + '</span></div>' : '') +
+        (k.fssaiHygieneRating ? '<div class="declared">FSSAI Hygiene Rating: <strong>' + esc(k.fssaiHygieneRating) + ' of 5</strong> — declared by the kitchen' +
+          (auditAt ? ', audited ' + esc(dayText(auditAt)) : '') + (auditAt && Date.now() - auditAt > 730 * DAY ? ' (audit over 2 years old)' : '') +
+          '. <a href="https://foscos.fssai.gov.in/" target="_blank" rel="noopener">Check on FSSAI FoSCoS</a></div>' : '') +
+      '</section>' +
+      '<section class="card"><h2>Hygiene rating · last 30 days</h2><p class="muted small">From every order this kitchen sealed with KitchenLens.</p>' +
+        (eligible
+          ? '<div class="big"><span class="num">' + st.toFixed(1) + '</span>' + meter(st) + '<span><span class="word">' + esc(word(s.percent || 0)) + '</span><br><span class="muted small">' +
+              esc(s.orders) + ' sealed orders' + (s.trend ? ' · ' + esc(s.trend) : '') + '</span></span></div><div class="metrics">' + metrics + '</div>'
+          : '<div class="notice" style="margin-top:12px">New kitchen on KitchenLens: the rating appears after 5 sealed orders (' + esc(s.orders || 0) + ' so far).</div>') +
+        (visitAt && Date.now() - visitAt < 60 * DAY ? '<div><span class="verified">✓ Verified visit by ' + esc(k.verifiedVisit.by || "KitchenLens") + ' · ' + esc(dayText(visitAt)) + '</span></div>' : '') +
+        ((k.notStocked && k.notStocked.length) ? '<p class="small muted" style="margin-top:12px">Not stocked by this kitchen (left out of the rating): ' + esc(k.notStocked.join(", ")) + '.</p>' : '') +
+        (k.updatedAt && !k.offline ? '<p class="small muted" style="margin-top:10px">Updated ' + esc(new Date(k.updatedAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })) + '</p>' : '') +
+      '</section>' +
+      '<section class="card"><h2>How the rating works</h2><ul class="how">' +
+        '<li>Every delivery bag gets a QR seal. Scanning it shows the packing clip, the food temperature and the kitchen’s hygiene records.</li>' +
+        '<li>Each order is scored from photos, clips, checks and supplier bills. Old records lose points, so the kitchen has to keep recording every shift.</li>' +
+        '<li>If food is packed below 65°C (hot) or above 5°C (cold), that order gets no rating.</li>' +
+        '<li>The 30-day rating is 75% average order score, 15% orders with complete proof and 10% surprise spot checks answered.</li>' +
+        '<li>Customers answer two questions after delivery; those answers are shown separately.</li>' +
+      '</ul></section>' +
+      '<footer class="footer"><span>The KitchenLens rating is worked out from the kitchen’s own recorded evidence. It is not an inspection or a guarantee of any meal, and it is not the FSSAI Hygiene Rating or endorsed by FSSAI.</span>' +
+        (CFG.supportEmail ? '<span>Questions? <a href="mailto:' + esc(CFG.supportEmail) + '">' + esc(CFG.supportEmail) + '</a></span>' : '') + '</footer>';
+    document.title = (k.name || "Kitchen") + " · Hygiene profile";
+  }
+  function fail(msg) { document.getElementById("app").innerHTML = '<section class="card"><h2>Kitchen not found</h2><p class="muted">' + esc(msg) + '</p></section>'; }
+
+  var q = new URLSearchParams(location.search);
+  var id = q.get("k"), packed = q.get("d");
+  var configured = CFG.projectId && CFG.apiKey && CFG.projectId !== "kitchenlens-demo";
+  if (packed) { unpack(packed).then(function (p) { render(fromPacked(p)); }).catch(function () { fail("This badge link could not be read. Open it in a recent version of Chrome or Safari."); }); return; }
+  if (!configured || !id || id === "demo") { render(sample()); return; }
+  fetch("https://firestore.googleapis.com/v1/projects/" + encodeURIComponent(CFG.projectId) + "/databases/(default)/documents/publicKitchens/" +
+    encodeURIComponent(id) + "?key=" + encodeURIComponent(CFG.apiKey)).then(function (r) {
+    if (r.status === 404) { fail("No kitchen matches this link."); return null; }
+    if (!r.ok) throw new Error(String(r.status));
+    return r.json();
+  }).then(function (d) { if (d) render(fields(d.fields || {})); })
+    .catch(function () { fail("We could not load this kitchen right now. Check your internet connection and try again."); });
+})();
+</script>
+</body>
+</html>

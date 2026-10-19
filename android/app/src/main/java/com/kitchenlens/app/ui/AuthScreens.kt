@@ -32,6 +32,12 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.kitchenlens.app.AppViewModel
 import com.kitchenlens.app.data.CITIES
+import com.kitchenlens.app.data.INVENTORY_CATEGORIES
+import com.kitchenlens.app.data.Kitchen
+import com.kitchenlens.app.util.Dates
+import com.kitchenlens.app.util.HygieneScore
+import com.kitchenlens.app.util.OfflineSeal
+import com.kitchenlens.app.util.QrLabel
 import com.kitchenlens.app.data.TIERS
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -112,26 +118,52 @@ fun LoginScreen(vm: AppViewModel) {
 }
 
 /** Editable kitchen details, shared by first-time setup and the "Kitchen details" screen. */
+private const val NO_FSSAI_RATING = "Not rated"
+private val FSSAI_RATING_OPTIONS = listOf(NO_FSSAI_RATING, "1", "2", "3", "4", "5")
+
 class KitchenProfileState(
     name: String = "", locality: String = "", city: String = CITIES.first(),
     fssai: String = "", gstin: String = "", tier: String = TIERS.first(),
+    fssaiHygieneRating: String = "", fssaiAuditDate: String = "", notStocked: Set<String> = emptySet(),
 ) {
+    constructor(k: Kitchen) : this(
+        k.name, k.locality, k.city.ifBlank { CITIES.first() }, k.fssai, k.gstin, k.tier.ifBlank { TIERS.first() },
+        k.fssaiHygieneRating, k.fssaiAuditDate, k.notStocked,
+    )
+
     var name by mutableStateOf(name)
     var locality by mutableStateOf(locality)
     var city by mutableStateOf(setOf(city))
     var fssai by mutableStateOf(fssai)
     var gstin by mutableStateOf(gstin)
     var tier by mutableStateOf(setOf(tier))
+    var fssaiRating by mutableStateOf(setOf(fssaiHygieneRating.ifBlank { NO_FSSAI_RATING }))
+    var fssaiAuditDate by mutableStateOf(fssaiAuditDate)
+    var notStocked by mutableStateOf(notStocked)
+
+    fun loadFrom(k: Kitchen) {
+        val f = KitchenProfileState(k)
+        name = f.name; locality = f.locality; city = f.city; fssai = f.fssai; gstin = f.gstin; tier = f.tier
+        fssaiRating = f.fssaiRating; fssaiAuditDate = f.fssaiAuditDate; notStocked = f.notStocked
+    }
+
+    private val ratingValue get() = fssaiRating.firstOrNull()?.takeIf { it != NO_FSSAI_RATING } ?: ""
 
     /** First problem to fix, or null when the details can be saved. */
     fun validate(): String? = when {
         name.isBlank() -> "Enter the kitchen name"
         locality.isBlank() -> "Enter the locality"
         fssai.length != 14 -> "FSSAI number must be 14 digits"
+        ratingValue.isNotBlank() && Dates.parse(fssaiAuditDate) == null -> "Enter the FSSAI hygiene audit date as dd-mm-yyyy"
+        ratingValue.isNotBlank() && (Dates.parse(fssaiAuditDate) ?: 0L) > System.currentTimeMillis() -> "The FSSAI audit date can't be in the future"
+        notStocked.size >= INVENTORY_CATEGORIES.size -> "At least one inventory category must be stocked"
         else -> Gstin.formError(gstin, required = false)
     }
 
-    fun toMap() = profileMap(name, locality, city.first(), fssai, Gstin.normalize(gstin), tier.first())
+    fun toMap() = profileMap(
+        name, locality, city.first(), fssai, Gstin.normalize(gstin), tier.first(),
+        ratingValue, if (ratingValue.isBlank()) "" else fssaiAuditDate.trim(), notStocked,
+    )
 }
 
 @Composable
@@ -158,6 +190,71 @@ fun KitchenProfileFields(state: KitchenProfileState) {
         },
     )
     ChipPicker("Kitchen area (kit tier)", TIERS, state.tier, multi = false) { state.tier = it }
+
+    ChipPicker("Inventory you never stock (left out of your hygiene rating)", INVENTORY_CATEGORIES, state.notStocked, multi = true) {
+        state.notStocked = it
+    }
+    Text(
+        "For example, a vegetarian kitchen selects Meat & Fish. Customers see that it is not stocked.",
+        style = MaterialTheme.typography.bodySmall,
+    )
+
+    ChipPicker("Official FSSAI Hygiene Rating (if you have the certificate)", FSSAI_RATING_OPTIONS, state.fssaiRating, multi = false) {
+        state.fssaiRating = it.ifEmpty { setOf(NO_FSSAI_RATING) }
+    }
+    if (state.fssaiRating.firstOrNull() != NO_FSSAI_RATING) {
+        OutlinedTextField(
+            state.fssaiAuditDate, { state.fssaiAuditDate = it.take(10) },
+            label = { Text("FSSAI hygiene audit date (dd-mm-yyyy)") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            "Shown to customers as \"declared by the kitchen\", separate from the KitchenLens rating. Keep the certificate " +
+                "ready: customers may ask for it. Certificates are valid for 2 years.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+/** Public kitchen page address; demo mode packs the profile into the link (no server). */
+fun kitchenPageUrl(vm: AppViewModel, k: Kitchen): String {
+    val base = BuildConfig.WEB_BASE_URL + "kitchen.html?k=" + Uri.encode(k.id)
+    if (!vm.repo.isDemo) return base
+    val pub = (vm.repo as? LocalRepository)?.publicKitchen() ?: return base
+    return base + "&d=" + OfflineSeal.kitchenPayload(pub)
+}
+
+/** Badge with the kitchen's 30-day rating, to share on listings and social media. */
+@Composable
+private fun KitchenBadgeCard(vm: AppViewModel, k: Kitchen) {
+    val context = LocalContext.current
+    val stats by vm.kitchenStats.collectAsStateWithLifecycle()
+    Card(colors = CardDefaults.cardColors(containerColor = LeafLight)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Your kitchen hygiene badge", fontWeight = FontWeight.Bold)
+            val s = stats
+            Text(s?.summary() ?: "Calculating your 30-day rating…", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "Post this badge on your Swiggy and Zomato menu photos, Instagram and Google listing. " +
+                    "Its QR opens your kitchen page with your live rating.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Button(
+                enabled = s != null,
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onClick@{
+                    val st = s ?: return@onClick
+                    val headline = if (st.eligible) "${st.stars} ★  ${st.rating}" else "New on KitchenLens"
+                    val detail = if (st.eligible) "${st.orders} sealed orders · last 30 days" else "Every order sealed with hygiene proof"
+                    val bmp = QrLabel.badgeBitmap(kitchenPageUrl(vm, k), k.name, headline, detail)
+                    QrLabel.share(context, bmp, "badge_" + k.id.takeLast(6), "Share hygiene badge")
+                },
+            ) { Text("Share hygiene badge") }
+            OutlinedButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(kitchenPageUrl(vm, k)))) } },
+            ) { Text("Open my kitchen page") }
+        }
+    }
 }
 
 @Composable
@@ -185,7 +282,8 @@ fun SetupKitchenScreen(vm: AppViewModel) {
                     val p = form.toMap()
                     scope.launch {
                         try {
-                            vm.repo.createKitchen(p["name"]!!, p["locality"]!!, p["city"]!!, p["fssai"]!!, p["gstin"]!!, p["tier"]!!)
+                            val id = vm.repo.createKitchen(p["name"]!!, p["locality"]!!, p["city"]!!, p["fssai"]!!, p["gstin"]!!, p["tier"]!!)
+                            vm.repo.updateKitchenProfile(id, p)   // FSSAI hygiene rating and "not stocked" choices
                             vm.refresh()
                         } catch (e: Exception) { error = e.message } finally { busy = false }
                     }
@@ -194,7 +292,8 @@ fun SetupKitchenScreen(vm: AppViewModel) {
         ) { Text(if (busy) "Saving…" else "Save and continue") }
         TextButton(onClick = {
             form.name = ""; form.locality = ""; form.city = setOf(CITIES.first()); form.fssai = ""; form.gstin = ""
-            form.tier = setOf(TIERS.first()); error = null
+            form.tier = setOf(TIERS.first()); form.fssaiRating = setOf(NO_FSSAI_RATING); form.fssaiAuditDate = ""
+            form.notStocked = emptySet(); error = null
         }, enabled = !busy) { Text("Reset") }
         TextButton(onClick = { vm.signOut() }) { Text("Sign out") }
     }
@@ -207,19 +306,14 @@ fun EditKitchenScreen(vm: AppViewModel, onDone: () -> Unit, onBack: () -> Unit) 
     val kitchen by vm.kitchen.collectAsStateWithLifecycle()
     val k = kitchen
     if (k == null) { CenteredLoading(); return }
-    val form = remember(k.id) {
-        KitchenProfileState(
-            k.name, k.locality, k.city.ifBlank { CITIES.first() }, k.fssai, k.gstin, k.tier.ifBlank { TIERS.first() },
-        )
-    }
+    val form = remember(k.id) { KitchenProfileState(k) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
     Scaffold(topBar = {
         BackBar("Kitchen details", onReset = {
             // Puts back the saved details, discarding unsaved edits
-            form.name = k.name; form.locality = k.locality; form.city = setOf(k.city.ifBlank { CITIES.first() })
-            form.fssai = k.fssai; form.gstin = k.gstin; form.tier = setOf(k.tier.ifBlank { TIERS.first() }); error = null
+            form.loadFrom(k); error = null
         }, onBack = onBack)
     }, containerColor = MaterialTheme.colorScheme.background) { pad ->
         Column(
@@ -227,6 +321,7 @@ fun EditKitchenScreen(vm: AppViewModel, onDone: () -> Unit, onBack: () -> Unit) 
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Changes appear on QR seals printed from now on.", style = MaterialTheme.typography.bodySmall)
+            KitchenBadgeCard(vm, k)
             (vm.repo as? LocalRepository)?.let { CloudStorageCard(it.cloud) }
             KitchenProfileFields(form)
             ErrorText(error)

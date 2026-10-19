@@ -11,6 +11,7 @@
     "ignore": ["firebase.json", "**/.*"],
     "rewrites": [
       { "source": "/o/config.js", "destination": "/config.js" },
+      { "source": "/o/kitchen.html", "destination": "/kitchen.html" },
       { "source": "/o/**", "destination": "/index.html" }
     ],
     "headers": [

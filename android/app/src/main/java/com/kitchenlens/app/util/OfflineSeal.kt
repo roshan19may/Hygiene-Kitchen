@@ -20,8 +20,39 @@ object OfflineSeal {
         base + code + (if (base.contains("?")) "&" else "?") + "d=" + payload(order)
 
     /** "z" + base64url(deflate(json)). */
-    fun payload(order: Map<String, Any?>): String {
-        val json = compactJson(order).toByteArray(Charsets.UTF_8)
+    fun payload(order: Map<String, Any?>): String = pack(compactJson(order))
+
+    /**
+     * Demo-mode kitchen page: the public profile and 30-day rating packed into the link
+     * (kitchen.html?k=ID&d=...). Live mode reads publicKitchens/{id} instead.
+     */
+    fun kitchenPayload(pub: Map<String, Any?>): String {
+        val stats = pub["stats"] as? Map<*, *> ?: emptyMap<Any?, Any?>()
+        fun n(k: String) = (stats[k] as? Number)?.toInt()
+        val sb = StringBuilder("{")
+        fun field(name: String, value: Any?) {
+            if (value == null || (value is String && value.isBlank())) return
+            if (sb.length > 1) sb.append(',')
+            sb.append('"').append(name).append("\":")
+            if (value is Number) sb.append(value) else sb.append(str(value.toString()))
+        }
+        field("v", 2)
+        field("k", pub["name"])
+        field("a", listOf(pub["locality"], pub["city"]).filterIsInstance<String>().filter { it.isNotBlank() }.joinToString(", "))
+        field("f", pub["fssai"])
+        field("g", pub["gstin"])
+        field("fh", pub["fssaiHygieneRating"])
+        field("fa", pub["fssaiAuditDate"])
+        field("ns", (pub["notStocked"] as? List<*>)?.joinToString("|"))
+        field("ks", listOf(n("percent") ?: 0, n("orders") ?: 0, n("consistency") ?: 0, n("spotAnswered") ?: 0,
+            n("spotRequested") ?: 0, ((stats["trend"] as? String) ?: "").take(1)).joinToString(","))
+        field("u", ((pub["updatedAt"] as? Number)?.toLong() ?: 0L) / 60_000)
+        sb.append('}')
+        return pack(sb.toString())
+    }
+
+    private fun pack(text: String): String {
+        val json = text.toByteArray(Charsets.UTF_8)
         val deflater = Deflater(Deflater.BEST_COMPRESSION, true)
         deflater.setInput(json)
         deflater.finish()
@@ -66,7 +97,7 @@ object OfflineSeal {
                 else -> sb.append(str(value.toString()))
             }
         }
-        field("v", 1)
+        field("v", 2)
         field("k", o["kitchenName"])
         field("a", listOf(o["kitchenLocality"], o["kitchenCity"]).filterIsInstance<String>().filter { it.isNotBlank() }.joinToString(", "))
         field("f", o["fssai"])
@@ -78,6 +109,27 @@ object OfflineSeal {
         field("t", (o["tempC"] as? Number)?.toDouble()?.let { Math.round(it * 10) / 10.0 })
         field("tk", o["tempOk"] as? Boolean ?: false)
         field("s", o["score"] as? Number)
+        val scoreBreakdown = o["scoreBreakdown"] as? Map<*, *>
+        val sectionRows = (scoreBreakdown?.get("sections") as? List<*>).orEmpty().mapNotNull { it as? Map<*, *> }
+        if (sectionRows.isNotEmpty()) {
+            field("b", sectionRows.joinToString(",") { ((it["earned"] as? Number)?.toInt() ?: 0).toString() })
+            field("bm", sectionRows.joinToString(",") { ((it["maximum"] as? Number)?.toInt() ?: 0).toString() })
+        }
+        field("co", scoreBreakdown?.get("complete") as? Boolean)
+        field("sg", scoreBreakdown?.get("safetyGatePassed") as? Boolean)
+        field("st", (scoreBreakdown?.get("status") as? String)?.take(1))
+        field("ns", (o["notStocked"] as? List<*>)?.joinToString("|"))
+        field("fh", o["fssaiHygieneRating"])
+        field("fa", o["fssaiAuditDate"])
+        // Kitchen's 30-day rating: percent, orders, consistency, spot answered, spot requested, trend
+        val ks = o["kitchenStats"] as? Map<*, *>
+        if (ks != null && (ks["orders"] as? Number)?.toInt() != null) {
+            field("ks", listOf(
+                (ks["percent"] as? Number)?.toInt() ?: 0, (ks["orders"] as? Number)?.toInt() ?: 0,
+                (ks["consistency"] as? Number)?.toInt() ?: 0, (ks["spotAnswered"] as? Number)?.toInt() ?: 0,
+                (ks["spotRequested"] as? Number)?.toInt() ?: 0, ((ks["trend"] as? String) ?: "").take(1),
+            ).joinToString(","))
+        }
         field("pt", packedAt / 60_000)
         // Cloud storage (optional): account name + packing clip ID; photo/clip IDs go in each row
         field("cl", o["cloudName"])

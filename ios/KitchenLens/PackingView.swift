@@ -146,7 +146,7 @@ struct PackingView: View {
                 TextField("Packed by (first name is shown)", text: $packer).textFieldStyle(.roundedBorder)
 
                 Card {
-                    Text("Food temperature at packing").font(.subheadline.weight(.semibold))
+                    Text("Food temperature at packing (8 points)").font(.subheadline.weight(.semibold))
                     ChipPicker(label: "Food type", options: ["Hot", "Cold"], selected: $foodType)
                     TextField("Temperature shown on the probe (°C)", text: $tempText).keyboardType(.decimalPad).textFieldStyle(.roundedBorder)
                     Text(foodType.first == "Cold" ? "Enter the reading shown. Guideline: cold food at 5°C or below."
@@ -156,15 +156,15 @@ struct PackingView: View {
                         let ok = HygieneScore.temperatureOk(foodType: foodType.first ?? "Hot", tempC: t)
                         Label(ok ? "Meets the guideline"
                               : (foodType.first == "Cold"
-                                 ? "Warning: above the 5°C guideline. Chill if you can. You can still continue; customers see the reading you enter."
-                                 : "Warning: below the 65°C FSSAI guideline. Reheat if you can. You can still continue; customers see the reading you enter."),
+                                 ? "Warning: above the 5°C guideline. Chill if you can. You can still continue, but the seal will show \"Rating withheld – food above 5°C\" instead of a star rating."
+                                 : "Warning: below the 65°C FSSAI guideline. Reheat if you can. You can still continue, but the seal will show \"Rating withheld – food below 65°C\" instead of a star rating."),
                               systemImage: ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                             .font(.footnote).foregroundColor(ok ? Brand.ok : Brand.chilli)
                     }
                 }
 
                 Card {
-                    Text("Hygiene Food Packing clip (5–20 s, no sound)").font(.subheadline.weight(.semibold))
+                    Text("Hygiene Food Packing clip (15 points; 5–20 s, no sound)").font(.subheadline.weight(.semibold))
                     if clip != nil {
                         Label("Clip recorded (\(clipSeconds) s) and saved in the draft", systemImage: "checkmark.circle.fill").foregroundColor(Brand.ok)
                     }

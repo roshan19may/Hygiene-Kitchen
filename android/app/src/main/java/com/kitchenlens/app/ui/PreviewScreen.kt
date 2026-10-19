@@ -1,5 +1,9 @@
 package com.kitchenlens.app.ui
 
+import com.kitchenlens.app.util.KitchenStats
+
+import com.kitchenlens.app.util.HygieneScore
+
 import android.net.Uri
 import android.widget.MediaController
 import android.widget.VideoView
@@ -94,9 +98,20 @@ private fun CustomerView(o: Map<String, Any?>, modifier: Modifier) {
 
         ClipPlayer(o["clipUrl"] as? String, (o["clipRecordedAt"] as? Number)?.toLong() ?: packedAt)
 
+        val (ratingValue, ratingLabel, ratingColor) = orderRating(o, score)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Stat(Modifier.weight(1f), "%.0f°C".format(temp), "Temperature at packing", if (tempOk) Ok else Chilli)
-            Stat(Modifier.weight(1f), "$score/100", "Hygiene score", if (score >= 80) Ok else if (score >= 50) Amber else Chilli)
+            Stat(Modifier.weight(1f), ratingValue, ratingLabel, ratingColor)
+        }
+        (o["kitchenStats"] as? Map<*, *>)?.let { ks ->
+            val orders = (ks["orders"] as? Number)?.toInt() ?: 0
+            val pct = (ks["percent"] as? Number)?.toInt() ?: 0
+            Text(
+                if (orders >= KitchenStats.MIN_ORDERS)
+                    "Kitchen rating (30 days): ${HygieneScore.stars(pct)}★ ${HygieneScore.rating(pct)} from $orders sealed orders"
+                else "Kitchen rating (30 days): new kitchen, shown after ${KitchenStats.MIN_ORDERS} sealed orders",
+                style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
+            )
         }
 
         Text("Kitchen hygiene at the time of your order", fontWeight = FontWeight.Bold)
@@ -113,6 +128,25 @@ private fun CustomerView(o: Map<String, Any?>, modifier: Modifier) {
             color = Color.Gray,
         )
         Spacer(Modifier.size(24.dp))
+    }
+}
+
+/** The rating shown at the top right of the customer report, in the same words. */
+private fun orderRating(o: Map<String, Any?>, score: Int): Triple<String, String, Color> {
+    val breakdown = o["scoreBreakdown"] as? Map<*, *>
+    if (breakdown.isNullOrEmpty()) return Triple("Not rated", "Issued before the rating system", Color.Gray)
+    val status = breakdown["status"] as? String ?: when {
+        breakdown["complete"] != true -> "incomplete"
+        breakdown["safetyGatePassed"] != true -> "withheld"
+        else -> "rated"
+    }
+    return when (status) {
+        "withheld" -> Triple("Rating withheld", HygieneScore.withheldReason(o["foodType"] as? String ?: "Hot"), Chilli)
+        "incomplete" -> Triple("Not rated", "Some hygiene records were missing", Amber)
+        else -> {
+            val stars = HygieneScore.stars(score)
+            Triple("$stars★", "${HygieneScore.rating(score)} hygiene rating", if (score >= 80) Ok else if (score >= 50) Amber else Chilli)
+        }
     }
 }
 

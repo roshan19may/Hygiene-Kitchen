@@ -59,7 +59,9 @@ final class AppModel: ObservableObject {
     let drafts = DraftStore()
 
     @Published var auth: AuthState = .loading
-    @Published var kitchen: Kitchen?
+    @Published var kitchen: Kitchen? { didSet { if let k = kitchen { updateStats(k) } else { kitchenStats = nil } } }
+    /// The kitchen's 30-day hygiene rating (kitchen page, badge, Home screen).
+    @Published var kitchenStats: KitchenStats?
     @Published var draft: OrderDraft?
     @Published var message: String?
     @Published var lastReset: (kitchenId: String, draft: OrderDraft?, latest: [String: [String: Any]])?
@@ -72,6 +74,33 @@ final class AppModel: ObservableObject {
     }
 
     var local: LocalRepository? { repo as? LocalRepository }
+
+    private var feedback: [(Bool, Bool)] = []
+    private var feedbackLoadedAt: Int64 = 0
+    private var lastPublished = ""
+
+    /// Recomputes the 30-day rating when the kitchen changes and publishes the public kitchen
+    /// page when something customers see has changed. Feedback is re-read at most every 30 min.
+    private func updateStats(_ k: Kitchen) {
+        Task {
+            let now = nowMs()
+            if now - feedbackLoadedAt > 30 * 60_000 {
+                if let f = try? await repo.recentFeedback(kitchenId: k.id, since: now - KitchenStats.windowDays * 24 * 3_600_000) { feedback = f }
+                feedbackLoadedAt = now
+            }
+            let stats = KitchenStats.compute(kitchenId: k.id, orderStats: k.orderStats, spotAnswers: k.spotAnswers, feedback: feedback, now: now)
+            kitchenStats = stats
+            var visible = publicKitchenMap(k, stats)
+            visible["updatedAt"] = nil
+            var sm = stats.map
+            sm["updatedAt"] = nil
+            visible["stats"] = sm
+            let key = (try? JSONSerialization.data(withJSONObject: visible, options: [.sortedKeys])).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+            if key != lastPublished {
+                do { try await repo.publishKitchen(k, stats: stats); lastPublished = key } catch {}
+            }
+        }
+    }
 
     func refresh() async {
         auth = .loading
@@ -142,6 +171,7 @@ final class AppModel: ObservableObject {
         draft = nil
         lastReset = nil
         kitchen = nil
+        lastPublished = ""
         repo.signOut()
         auth = .loggedOut
     }

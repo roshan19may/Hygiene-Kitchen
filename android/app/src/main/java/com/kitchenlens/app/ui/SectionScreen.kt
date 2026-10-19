@@ -65,6 +65,7 @@ private val SECTION_HINTS = mapOf(
     Section.UTENSILS to "Record the wash: scrubbing, rinsing in hot water or sanitiser, and the drying rack.",
     Section.STAFF to "Record each staff member washing hands with soap, then show cap, gloves and apron.",
     Section.PEST to "Photograph the pest-control service report showing the vendor and date.",
+    Section.SPOT to "Spot check: slowly show the wash area, then the packing table, for about 10 seconds.",
 )
 
 private const val MIN_STAFF_CHECKS = 2
@@ -75,7 +76,7 @@ private fun StaffChecklist(selected: Set<String>, onChange: (Set<String>) -> Uni
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(vertical = 8.dp)) {
             Text(
-                "Checks shown in the clip (select at least $MIN_STAFF_CHECKS)",
+                "Staff hygiene checks shown in the clip (1 point each; select all 5 for full points)",
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
@@ -182,6 +183,7 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
             Section.STAFF -> when {
                 checklist.size < MIN_STAFF_CHECKS -> "Select at least $MIN_STAFF_CHECKS hygiene checks (${checklist.size} selected)"
                 shift.isEmpty() -> "Choose the shift"
+                staffCount.isBlank() -> "Enter the number of staff on shift"
                 else -> null
             }
             Section.PEST -> when {
@@ -189,7 +191,7 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
                 parseDate(serviceDate) == null -> "Service date must be dd-mm-yyyy"
                 else -> null
             }
-            Section.PACKING -> null
+            Section.PACKING, Section.SPOT -> null
         }
         error = when {
             staffName.isBlank() -> "Enter your name"
@@ -227,6 +229,7 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
                 details["nextDueMillis"] = due.toString()
             }
             Section.PACKING -> label = "Packed"
+            Section.SPOT -> label = "Spot check"
         }
 
         working = true
@@ -256,36 +259,58 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(section.subtitle, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                when (section) {
+                    Section.UTENSILS -> "Worth 15 points: cleaning methods 5 (3 or more), wash video 10. Full points for 12 hours " +
+                        "(one shift), half points up to 24 hours, then 0. Name and shift are required but earn no points."
+                    Section.STAFF -> "Worth 15 points: 1 per hygiene check shown (up to 5), video 10. Full points for 12 hours " +
+                        "(one shift), half points up to 24 hours, then 0. Name, shift and staff count are required."
+                    Section.PEST -> "Worth 15 points: vendor 3, service recency 1–4, report photo 8. Counts until the next service " +
+                        "date, half points for 7 days after it, then 0."
+                    Section.SPOT -> "The app asks for one spot check a day at a random time. Recording it within 30 minutes " +
+                        "raises your kitchen's 30-day rating."
+                    else -> ""
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
             when (section) {
                 Section.INVENTORY -> Unit // handled by InventoryScreen
                 Section.UTENSILS -> {
-                    ChipPicker("Cleaning medium used", CLEANING_MEDIA, media, multi = true) { media = it }
-                    ChipPicker("Shift", SHIFTS, shift, multi = false) { shift = it }
+                    ChipPicker("Cleaning medium used (5 points for 3 or more)", CLEANING_MEDIA, media, multi = true) { media = it }
+                    ChipPicker("Shift (required)", SHIFTS, shift, multi = false) { shift = it }
                 }
                 Section.STAFF -> {
                     StaffChecklist(checklist) { checklist = it }
-                    ChipPicker("Shift", SHIFTS, shift, multi = false) { shift = it }
+                    ChipPicker("Shift (required)", SHIFTS, shift, multi = false) { shift = it }
                     OutlinedTextField(
                         staffCount, { staffCount = it.filter(Char::isDigit).take(2) },
-                        label = { Text("Staff on this shift") }, singleLine = true,
+                        label = { Text("Staff on this shift (required)") }, singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
                 Section.PEST -> {
-                    OutlinedTextField(vendor, { vendor = it }, label = { Text("Pest-control vendor") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(serviceDate, { serviceDate = it }, label = { Text("Service date (dd-mm-yyyy)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(vendor, { vendor = it }, label = { Text("Pest-control vendor (3 points)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(serviceDate, { serviceDate = it }, label = { Text("Service date (dd-mm-yyyy; 1–4 points by recency)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                     ChipPicker("Next service due in (days)", listOf("15", "30", "60", "90"), nextDueDays, multi = false) { nextDueDays = it }
                 }
-                Section.PACKING -> Unit
+                Section.PACKING, Section.SPOT -> Unit
             }
 
             // ---- main photo / clip ----
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     val isPhoto = section.media == MediaType.PHOTO
-                    Text(if (isPhoto) "Photo proof" else "Video proof (5–20 s, no sound)", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        when (section) {
+                            Section.UTENSILS -> "Wash video (10 points; 5–20 s, no sound)"
+                            Section.STAFF -> "Hand-wash and kit video (10 points; 5–20 s, no sound)"
+                            Section.PEST -> "Service report photo (8 points)"
+                            Section.SPOT -> "Spot-check clip (about 10 s, no sound)"
+                            else -> if (isPhoto) "Photo proof" else "Video proof (5–20 s, no sound)"
+                        }, fontWeight = FontWeight.SemiBold)
                     val f = mainFile
                     if (f != null) {
                         if (isPhoto) {
@@ -309,7 +334,9 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
                 }
             }
 
-            OutlinedTextField(staffName, { staffName = it }, label = { Text("Recorded by (your name)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(staffName, { staffName = it }, label = { Text(when (section) {
+                    else -> "Recorded by (your name, required)"
+                }) }, singleLine = true, modifier = Modifier.fillMaxWidth())
 
             ErrorText(error)
             if (working && progress > 0f) LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())

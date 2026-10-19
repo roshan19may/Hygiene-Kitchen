@@ -4,41 +4,7 @@ import Compression
 // Rules shared with the Android app. Keep the two in step so seals look the same
 // whichever phone created them.
 
-enum HygieneScore {
-    static let hotMinC = 65.0   // FSSAI guideline for hot food
-    static let coldMaxC = 5.0
-    private static let hour: Int64 = 3_600_000
-
-    static func temperatureOk(foodType: String, tempC: Double) -> Bool {
-        foodType == "Cold" ? tempC <= coldMaxC : tempC >= hotMinC
-    }
-
-    /// Five pillars of 20 points: utensils, staff, pest control, perishable delivery, temperature.
-    static func compute(latest: [String: [String: Any]], tempOk: Bool, now: Int64) -> Int {
-        var score = 0
-        score += freshness(latest[Section.UTENSILS.rawValue], now, 12, 24)
-        score += freshness(latest[Section.STAFF.rawValue], now, 12, 24)
-        score += pest(latest[Section.PEST.rawValue], now)
-        score += PERISHABLE_CATEGORIES.map { freshness(latest[latestKey(.INVENTORY, category: $0)], now, 48, 96) }.max() ?? 0
-        if tempOk { score += 20 }
-        return score
-    }
-
-    private static func freshness(_ e: [String: Any]?, _ now: Int64, _ full: Int64, _ half: Int64) -> Int {
-        guard let at = num(e?["at"]) else { return 0 }
-        let age = now - at
-        if age <= full * hour { return 20 }
-        if age <= half * hour { return 10 }
-        return 0
-    }
-
-    private static func pest(_ e: [String: Any]?, _ now: Int64) -> Int {
-        guard let d = e?["details"] as? [String: Any], let due = num(d["nextDueMillis"]) else { return 0 }
-        if now <= due { return 20 }
-        if now <= due + 7 * 24 * hour { return 10 }
-        return 0
-    }
-}
+// HygieneScore, KitchenStats and SpotCheck live in Rating.swift.
 
 enum Gstin {
     enum Result { case empty, badFormat, badChecksum, ok }
@@ -153,9 +119,21 @@ func orderRefKey(platform: String, orderRef: String) -> String {
 
 let PRIVATE_DETAIL_KEYS: Set<String> = ["billUrl", "billUrls", "supplierGstins"]
 
-func profileMap(name: String, locality: String, city: String, fssai: String, gstin: String, tier: String) -> [String: String] {
+func profileMap(name: String, locality: String, city: String, fssai: String, gstin: String, tier: String,
+                fssaiHygieneRating: String = "", fssaiAuditDate: String = "", notStocked: Set<String> = []) -> [String: String] {
     ["name": name.trimmingCharacters(in: .whitespaces), "locality": locality.trimmingCharacters(in: .whitespaces),
-     "city": city, "fssai": fssai.trimmingCharacters(in: .whitespaces), "gstin": gstin.trimmingCharacters(in: .whitespaces), "tier": tier]
+     "city": city, "fssai": fssai.trimmingCharacters(in: .whitespaces), "gstin": gstin.trimmingCharacters(in: .whitespaces), "tier": tier,
+     "fssaiHygieneRating": fssaiHygieneRating.trimmingCharacters(in: .whitespaces),
+     "fssaiAuditDate": fssaiAuditDate.trimmingCharacters(in: .whitespaces),
+     // Kept as text so the profile stays a simple map of strings (same as Android)
+     "notStocked": notStocked.sorted().joined(separator: "|")]
+}
+
+/// Public kitchen profile for the kitchen page (no private data).
+func publicKitchenMap(_ k: Kitchen, _ stats: KitchenStats) -> [String: Any] {
+    ["name": k.name, "locality": k.locality, "city": k.city, "fssai": k.fssai, "gstin": k.gstin,
+     "fssaiHygieneRating": k.fssaiHygieneRating, "fssaiAuditDate": k.fssaiAuditDate,
+     "notStocked": k.notStocked.sorted(), "stats": stats.map, "updatedAt": stats.updatedAt]
 }
 
 /// Public summary kept under kitchen.latest; bill photos and supplier GSTINs stay private.
@@ -199,7 +177,7 @@ func buildInventoryRecords(photoUrls: [String: [String]], bills: [InventoryBill]
 /// The public order record (same fields as the Android app).
 func buildOrderRecord(kitchen: Kitchen, platform: String, orderRef: String, packerName: String, foodType: String,
                       tempC: Double, tempOk: Bool, clipUrl: String, packedAt: Int64, score: Int,
-                      clipRecordedAt: Int64) -> [String: Any] {
+                      clipRecordedAt: Int64, scoreBreakdown: [String: Any] = [:], kitchenStats: [String: Any] = [:]) -> [String: Any] {
     let digits = orderRef.filter { $0.isLetter || $0.isNumber }
     return [
         "clipRecordedAt": clipRecordedAt,
@@ -211,7 +189,17 @@ func buildOrderRecord(kitchen: Kitchen, platform: String, orderRef: String, pack
         "orderRefLast4": String(digits.suffix(4)),
         "packerName": packerName.trimmingCharacters(in: .whitespaces).split(separator: " ").first.map(String.init) ?? "",
         "foodType": foodType, "tempC": tempC, "tempOk": tempOk, "clipUrl": clipUrl,
-        "packedAtMillis": packedAt, "score": score, "snapshot": kitchen.latest,
+        "packedAtMillis": packedAt, "score": score,
+        "scoreBreakdown": scoreBreakdown,
+        "scoreComplete": scoreBreakdown["complete"] as? Bool ?? false,
+        "safetyGatePassed": scoreBreakdown["safetyGatePassed"] as? Bool ?? false,
+        "scoreStatus": scoreBreakdown["status"] as? String ?? "incomplete",
+        "rating": scoreBreakdown["rating"] as? String ?? "",
+        "stars": scoreBreakdown["stars"] as? Double ?? 0,
+        "notStocked": kitchen.notStocked.sorted(),
+        "fssaiHygieneRating": kitchen.fssaiHygieneRating, "fssaiAuditDate": kitchen.fssaiAuditDate,
+        "kitchenStats": kitchenStats,
+        "snapshot": kitchen.latest.filter { $0.key != "SPOT" },
     ]
 }
 
@@ -280,7 +268,7 @@ enum OfflineSeal {
             default: return
             }
         }
-        field("v", 1)
+        field("v", 2)
         field("k", o["kitchenName"] as? String)
         field("a", [o["kitchenLocality"] as? String, o["kitchenCity"] as? String].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", "))
         field("f", o["fssai"] as? String)
@@ -292,6 +280,23 @@ enum OfflineSeal {
         field("t", dbl(o["tempC"]).map { ($0 * 10).rounded() / 10 })
         field("tk", (o["tempOk"] as? Bool) ?? false)
         field("s", num(o["score"]))
+        if let b = o["scoreBreakdown"] as? [String: Any] {
+            let secs = b["sections"] as? [[String: Any]] ?? []
+            if !secs.isEmpty {
+                field("b", secs.map { String(num($0["earned"]) ?? 0) }.joined(separator: ","))
+                field("bm", secs.map { String(num($0["maximum"]) ?? 0) }.joined(separator: ","))
+            }
+            field("co", b["complete"] as? Bool)
+            field("sg", b["safetyGatePassed"] as? Bool)
+            field("st", (b["status"] as? String).map { String($0.prefix(1)) })
+        }
+        field("ns", (o["notStocked"] as? [String])?.joined(separator: "|"))
+        field("fh", o["fssaiHygieneRating"] as? String)
+        field("fa", o["fssaiAuditDate"] as? String)
+        if let ks = o["kitchenStats"] as? [String: Any], let n = num(ks["orders"]) {
+            field("ks", ["\(num(ks["percent"]) ?? 0)", "\(n)", "\(num(ks["consistency"]) ?? 0)", "\(num(ks["spotAnswered"]) ?? 0)",
+                         "\(num(ks["spotRequested"]) ?? 0)", String(((ks["trend"] as? String) ?? "").prefix(1))].joined(separator: ","))
+        }
         field("pt", packedAt / 60_000)
         field("cl", o["cloudName"] as? String)
         field("c", o["clipCloudId"] as? String)
@@ -302,6 +307,25 @@ enum OfflineSeal {
             return s + "]"
         }
         return "{" + parts.joined(separator: ",") + ",\"r\":[" + rowJson.joined(separator: ",") + "]}"
+    }
+
+    /// Demo-mode kitchen page: profile and 30-day rating packed into the badge link.
+    static func kitchenPayload(_ pub: [String: Any]) -> String {
+        let st = pub["stats"] as? [String: Any] ?? [:]
+        func n(_ k: String) -> Int64 { num(st[k]) ?? 0 }
+        var parts: [String] = ["\"v\":2"]
+        func field(_ name: String, _ v: String?) { if let v, !v.isEmpty { parts.append("\"\(name)\":\(str(v))") } }
+        field("k", pub["name"] as? String)
+        field("a", [pub["locality"] as? String, pub["city"] as? String].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", "))
+        field("f", pub["fssai"] as? String)
+        field("g", pub["gstin"] as? String)
+        field("fh", pub["fssaiHygieneRating"] as? String)
+        field("fa", pub["fssaiAuditDate"] as? String)
+        field("ns", (pub["notStocked"] as? [String])?.joined(separator: "|"))
+        field("ks", "\(n("percent")),\(n("orders")),\(n("consistency")),\(n("spotAnswered")),\(n("spotRequested")),"
+              + String(((st["trend"] as? String) ?? "").prefix(1)))
+        parts.append("\"u\":\((num(pub["updatedAt"]) ?? 0) / 60_000)")
+        return "z" + base64url(deflateRaw(Data(("{" + parts.joined(separator: ",") + "}").utf8)))
     }
 
     private static func fmt(_ d: Double) -> String {

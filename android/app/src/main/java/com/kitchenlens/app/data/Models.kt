@@ -6,7 +6,8 @@ enum class Section(val title: String, val subtitle: String, val media: MediaType
     UTENSILS("Cooking Utensils cleaning details", "Short clip of the wash + cleaning medium", MediaType.VIDEO, 12),
     STAFF("Chef, Support staff cooking hygiene", "Hand-wash, cap, gloves, apron check", MediaType.VIDEO, 12),
     PEST("Pest control details", "Service report photo + next due date", MediaType.PHOTO, 24 * 30),
-    PACKING("Packing + temperature", "Per-order Hygiene Food Packing clip and Order QR seal", MediaType.VIDEO, 0);
+    PACKING("Packing + temperature", "Per-order Hygiene Food Packing clip and Order QR seal", MediaType.VIDEO, 0),
+    SPOT("Spot check", "A 10-second clip of the wash area and packing table, recorded when the app asks", MediaType.VIDEO, 0);
 }
 
 enum class MediaType(val value: String) { PHOTO("photo"), VIDEO("video") }
@@ -38,6 +39,15 @@ data class Kitchen(
     /** latestKey -> summary map (at, mediaUrl, mediaType, label, details) */
     val latest: Map<String, Map<String, Any?>> = emptyMap(),
     val recentHashes: List<String> = emptyList(),
+    /** Inventory categories this kitchen never stocks (left out of the score). */
+    val notStocked: Set<String> = emptySet(),
+    /** Official FSSAI Hygiene Rating as declared by the kitchen ("" or "1"–"5") and its audit date. */
+    val fssaiHygieneRating: String = "",
+    val fssaiAuditDate: String = "",
+    /** Times spot checks were answered (last 60). */
+    val spotAnswers: List<Long> = emptyList(),
+    /** Last 30 days of orders as "packedAtMillis|percent|status" for the kitchen rating. */
+    val orderStats: List<String> = emptyList(),
 )
 
 /** One produce photo taken on the inventory screen. */

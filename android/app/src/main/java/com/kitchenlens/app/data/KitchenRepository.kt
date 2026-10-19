@@ -1,6 +1,7 @@
 package com.kitchenlens.app.data
 
 import com.kitchenlens.app.util.Dates
+import com.kitchenlens.app.util.KitchenStats
 import kotlinx.coroutines.flow.Flow
 import java.io.File
 
@@ -85,7 +86,26 @@ interface KitchenRepository {
      * both require this). [password] re-confirms the user for cloud accounts.
      */
     suspend fun deleteAccount(password: String)
+
+    /** Customer answers from the last 30 days: (seal intact, food at the right temperature). Live mode only. */
+    suspend fun recentFeedback(kitchenId: String, since: Long): List<Pair<Boolean, Boolean>>
+
+    /** Publishes the kitchen's public profile and 30-day rating (kitchen page and badge). */
+    suspend fun publishKitchen(kitchen: Kitchen, stats: KitchenStats)
 }
+
+/** The kitchen's 30-day rating from its rolling order list, spot checks and customer feedback. */
+suspend fun KitchenRepository.kitchenStats(kitchen: Kitchen, now: Long = System.currentTimeMillis()): KitchenStats {
+    val feedback = runCatching { recentFeedback(kitchen.id, now - KitchenStats.WINDOW_DAYS * 24 * 3_600_000L) }.getOrDefault(emptyList())
+    return KitchenStats.compute(kitchen.id, kitchen.orderStats, kitchen.spotAnswers, feedback, now)
+}
+
+/** Public kitchen profile shown on the kitchen page (no private data). */
+fun publicKitchenMap(k: Kitchen, stats: KitchenStats): Map<String, Any?> = mapOf(
+    "name" to k.name, "locality" to k.locality, "city" to k.city, "fssai" to k.fssai, "gstin" to k.gstin,
+    "fssaiHygieneRating" to k.fssaiHygieneRating, "fssaiAuditDate" to k.fssaiAuditDate,
+    "notStocked" to k.notStocked.toList(), "stats" to stats.toMap(), "updatedAt" to stats.updatedAt,
+)
 
 /** Thrown when a QR seal already exists for the same platform order number. */
 class DuplicateOrderException(val existingCode: String, platform: String, orderRef: String) :
@@ -101,10 +121,23 @@ fun orderRefKey(platform: String, orderRef: String): String =
 /** Detail keys that are kept in the private log only, never shown to customers. */
 val PRIVATE_DETAIL_KEYS = setOf("billUrl", "billUrls", "supplierGstins")
 
-fun profileMap(name: String, locality: String, city: String, fssai: String, gstin: String, tier: String) = mapOf(
+fun profileMap(
+    name: String, locality: String, city: String, fssai: String, gstin: String, tier: String,
+    fssaiHygieneRating: String = "", fssaiAuditDate: String = "", notStocked: Set<String> = emptySet(),
+) = mapOf(
     "name" to name.trim(), "locality" to locality.trim(), "city" to city,
     "fssai" to fssai.trim(), "gstin" to gstin.trim(), "tier" to tier,
+    "fssaiHygieneRating" to fssaiHygieneRating.trim(), "fssaiAuditDate" to fssaiAuditDate.trim(),
+    // Kept as text so the profile stays a simple map of strings
+    "notStocked" to notStocked.sorted().joinToString("|"),
 )
+
+/** Reads a list stored either as a real list or as "a|b|c" text. */
+fun stringSet(v: Any?): Set<String> = when (v) {
+    is List<*> -> v.mapNotNull { it?.toString()?.takeIf(String::isNotBlank) }.toSet()
+    is String -> v.split("|").map { it.trim() }.filter { it.isNotBlank() }.toSet()
+    else -> emptySet()
+}
 
 /** Public summary saved under kitchen.latest; supplier bill photos and GSTINs stay private. */
 fun publicSummary(
@@ -173,6 +206,11 @@ fun kitchenFromMap(id: String, m: Map<String, Any?>): Kitchen = Kitchen(
     tier = m["tier"] as? String ?: "",
     latest = (m["latest"] as? Map<String, Map<String, Any?>>) ?: emptyMap(),
     recentHashes = (m["recentHashes"] as? List<String>) ?: emptyList(),
+    notStocked = stringSet(m["notStocked"]),
+    fssaiHygieneRating = m["fssaiHygieneRating"] as? String ?: "",
+    fssaiAuditDate = m["fssaiAuditDate"] as? String ?: "",
+    spotAnswers = (m["spotAnswers"] as? List<*>)?.mapNotNull { (it as? Number)?.toLong() } ?: emptyList(),
+    orderStats = (m["orderStats"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
 )
 
 fun orderSummaryFromMap(code: String, m: Map<String, Any?>) = OrderSummary(
@@ -198,6 +236,8 @@ fun buildOrderRecord(
     packedAt: Long,
     score: Int,
     clipRecordedAt: Long = packedAt,
+    scoreBreakdown: Map<String, Any?> = emptyMap(),
+    kitchenStats: Map<String, Any?> = emptyMap(),
 ): Map<String, Any?> = mapOf(
     "clipRecordedAt" to clipRecordedAt,
     "kitchenId" to kitchen.id,
@@ -218,5 +258,17 @@ fun buildOrderRecord(
     "clipUrl" to clipUrl,
     "packedAtMillis" to packedAt,
     "score" to score,
-    "snapshot" to kitchen.latest,
+    "scoreBreakdown" to scoreBreakdown,
+    "scoreComplete" to (scoreBreakdown["complete"] as? Boolean ?: false),
+    "safetyGatePassed" to (scoreBreakdown["safetyGatePassed"] as? Boolean ?: false),
+    "scoreStatus" to (scoreBreakdown["status"] as? String ?: "incomplete"),
+    "rating" to (scoreBreakdown["rating"] as? String ?: ""),
+    "stars" to (scoreBreakdown["stars"] as? Number ?: 0.0),
+    "notStocked" to kitchen.notStocked.toList(),
+    "fssaiHygieneRating" to kitchen.fssaiHygieneRating,
+    "fssaiAuditDate" to kitchen.fssaiAuditDate,
+    // The kitchen's 30-day rating at the moment of packing (the report also loads the live one)
+    "kitchenStats" to kitchenStats,
+    // Spot-check answers are not shown in the order timeline
+    "snapshot" to kitchen.latest.filterKeys { it != "SPOT" },
 )

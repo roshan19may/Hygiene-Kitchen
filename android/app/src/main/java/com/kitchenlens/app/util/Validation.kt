@@ -54,6 +54,8 @@ object Dates {
 
     fun parse(text: String): Long? = runCatching { fmt().parse(text.trim())?.time }.getOrNull()
 
+    fun format(ms: Long): String = fmt().format(java.util.Date(ms))
+
     /** The most recent valid date in the list, formatted dd-MM-yyyy. */
     fun latest(dates: List<String>): String? =
         dates.mapNotNull { d -> parse(d)?.let { d.trim() to it } }.maxByOrNull { it.second }?.first

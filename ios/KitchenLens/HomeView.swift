@@ -14,10 +14,16 @@ private struct Status { let color: Color; let text: String }
 private func status(_ k: Kitchen, _ s: Section, now: Int64) -> Status {
     let hour: Int64 = 3_600_000
     if s == .INVENTORY {
-        let entries = INVENTORY_CATEGORIES.compactMap { c in num(k.latest[latestKey(.INVENTORY, category: c)]?["at"]).map { (c, $0) } }
+        let stocked = INVENTORY_CATEGORIES.filter { !k.notStocked.contains($0) }
+        let entries = stocked.compactMap { c in num(k.latest[latestKey(.INVENTORY, category: c)]?["at"]).map { (c, $0) } }
         guard let newest = entries.max(by: { $0.1 < $1.1 }) else { return Status(color: Brand.chilli, text: "Not recorded yet") }
-        return Status(color: now - newest.1 <= s.freshForHours * hour ? Brand.ok : Brand.amber,
-                      text: "\(newest.0) \(Dates.ago(newest.1, now: now)) · \(entries.count) categories logged")
+        // Same expiry as the rating: perishables 48 h, dry goods 7 days
+        let expired = entries.filter { c, at in
+            now - at > (PERISHABLE_CATEGORIES.contains(c) ? HygieneScore.perishableFullH : HygieneScore.dryFullH) * hour
+        }
+        let color = expired.isEmpty && entries.count == stocked.count ? Brand.ok : (entries.count > expired.count ? Brand.amber : Brand.chilli)
+        return Status(color: color, text: "\(newest.0) \(Dates.ago(newest.1, now: now)) · \(entries.count - expired.count) of \(stocked.count) categories current"
+                      + (expired.isEmpty ? "" : " · expired: " + expired.map(\.0).joined(separator: ", ")))
     }
     guard let e = k.latest[s.rawValue], let at = num(e["at"]) else { return Status(color: Brand.chilli, text: "Not recorded yet") }
     if s == .PEST {
@@ -27,8 +33,10 @@ private func status(_ k: Kitchen, _ s: Section, now: Int64) -> Status {
         return Status(color: color, text: "Last service \(Dates.ago(at, now: now)) · next due \(d?["nextDueDate"] as? String ?? "-")")
     }
     let age = now - at
-    let color = age <= s.freshForHours * hour ? Brand.ok : (age <= s.freshForHours * 2 * hour ? Brand.amber : Brand.chilli)
-    return Status(color: color, text: "Updated \(Dates.ago(at, now: now))")
+    let full = HygieneScore.shiftFullH * hour, half = HygieneScore.shiftHalfH * hour
+    let color = age <= full ? Brand.ok : (age <= half ? Brand.amber : Brand.chilli)
+    let note = age <= full ? "" : (age <= half ? " · half points now, record again this shift" : " · expired, earns 0 points: record again")
+    return Status(color: color, text: "Updated \(Dates.ago(at, now: now))\(note)")
 }
 
 /// Kitchen Hygiene proof sections with nothing recorded yet.
@@ -43,6 +51,8 @@ struct HomeView: View {
     @EnvironmentObject var model: AppModel
     @State private var path: [Route] = []
     @State private var missing: [Section]?
+    @State private var tick = Date()
+    private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     private func packWithCheck() {
         guard let k = model.kitchen else { return }
@@ -90,12 +100,15 @@ struct HomeView: View {
             }
         }
         .onChange(of: path) { p in if p.isEmpty { Task { await model.reloadKitchen() } } }
+        .onReceive(timer) { tick = $0 }   // shows and hides the spot-check card on time
     }
 
     @ViewBuilder
     private func content(_ k: Kitchen, proxy: ScrollViewProxy) -> some View {
-        let now = nowMs()
-        let readiness = HygieneScore.compute(latest: k.latest, tempOk: true, now: now)
+        let now = max(nowMs(), Int64(tick.timeIntervalSince1970 * 1000))   // reading tick refreshes this every 30 s
+        let readiness = HygieneScore.readiness(latest: k.latest, now: now, notStocked: k.notStocked)
+        let window = SpotCheck.current(kitchenId: k.id, now: now)
+        let spot: (start: Int64, end: Int64)? = window.map { SpotCheck.answered(k.spotAnswers, $0) } == false ? window : nil
         VStack(alignment: .leading, spacing: 12) {
             Text("\(k.locality), \(k.city)").font(.subheadline).foregroundColor(.secondary)
             if model.repo.isDemo { DemoBanner() }
@@ -116,6 +129,20 @@ struct HomeView: View {
                     }
                 }
             }
+            if let w = spot {
+                Button { path.append(.section(.SPOT)) } label: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Spot check now").font(.headline)
+                        Text("Record a 10-second clip of your wash area and packing table. \(max(1, (w.end - now) / 60_000)) min left. Answered spot checks raise your kitchen rating.")
+                            .font(.footnote).multilineTextAlignment(.leading)
+                        Text("Record spot check").font(.subheadline.bold())
+                    }
+                    .foregroundColor(Color(red: 0.23, green: 0.16, blue: 0))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14).background(Brand.turmeric).clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+            }
             if k.gstin.isEmpty {
                 Button { path.append(.kitchen) } label: {
                     Text("Tip: add your GST number in Kitchen details so customers see it on every seal.").font(.footnote)
@@ -123,9 +150,20 @@ struct HomeView: View {
             }
 
             Card(tint: Brand.leaf) {
-                Text("Ready-to-pack score: \(readiness) / 100").font(.headline).foregroundColor(.white)
-                Text("Customers see this score on every order (temperature at 65°C or above, per FSSAI guideline, adds the last 20 points).")
+                Text("Next order's rating: \(String(format: "%.1f", readiness.stars)) \(HygieneScore.starText(readiness.stars)) \(readiness.rating) (\(readiness.percent)%)")
+                    .font(.headline).foregroundColor(.white)
+                Text("What customers will see on the seal if the food is at 65°C or above (FSSAI guideline) and you record the packing clip. Old records lose points: shift records after 12 h, perishables after 48 h.")
                     .font(.caption).foregroundColor(.white.opacity(0.85))
+                let tips = readiness.tips()
+                if !tips.isEmpty {
+                    Text("To gain points:\n" + tips.map { "• " + $0 }.joined(separator: "\n")).font(.caption).foregroundColor(.white)
+                }
+                if let st = model.kitchenStats {
+                    Button { path.append(.kitchen) } label: {
+                        Text("Kitchen rating (30 days): " + st.summary() + (st.spotRequested > 0 ? " · spot checks \(st.spotAnswered)/\(st.spotRequested)" : ""))
+                            .font(.caption).foregroundColor(.white).multilineTextAlignment(.leading)
+                    }
+                }
                 if let d = model.draft {
                     Text("Order in progress: \(d.platform.isEmpty ? "platform not chosen" : d.platform)\(d.orderRef.isEmpty ? "" : " #" + d.orderRef) · saved \(Dates.ago(d.savedAt))")
                         .font(.subheadline).foregroundColor(.white)

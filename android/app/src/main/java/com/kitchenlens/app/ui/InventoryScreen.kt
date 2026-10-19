@@ -55,6 +55,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.kitchenlens.app.AppViewModel
 import com.kitchenlens.app.data.INVENTORY_CATEGORIES
+import com.kitchenlens.app.util.HygieneScore
 import com.kitchenlens.app.data.InventoryBill
 import com.kitchenlens.app.data.InventoryPhoto
 import com.kitchenlens.app.data.Section
@@ -184,6 +185,7 @@ fun InventoryScreen(vm: AppViewModel, onDone: () -> Unit, onBack: () -> Unit) {
         error = when {
             selected.isEmpty() -> "Choose at least one category that arrived"
             missingPhotos != null -> "Add at least one photo for $missingPhotos"
+            supplier.isEmpty() -> "Choose where the food was bought from"
             staffName.isBlank() -> "Enter your name"
             else -> billProblem
         }
@@ -218,18 +220,30 @@ fun InventoryScreen(vm: AppViewModel, onDone: () -> Unit, onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(
-                "Choose every category that arrived, then take one or more photos of each. " +
-                    "Customers see the category and when it arrived, never item names or quantities.",
+                "Food inventory is worth 32 points: photos of each category (points shown below) and supplier bills (7). " +
+                    "Perishables (vegetables, meat & fish, dairy) count for 48 hours, dry goods for 7 days, then they must be " +
+                    "recorded again. Customers see categories, never item names or quantities.",
                 style = MaterialTheme.typography.bodyMedium,
             )
-            ChipPicker("Categories received", INVENTORY_CATEGORIES, cats, multi = true) { cats = it }
+            val stocked = INVENTORY_CATEGORIES.filter { it !in k.notStocked }
+            ChipPicker("Categories received", stocked, cats, multi = true) { cats = it }
+            if (k.notStocked.isNotEmpty()) {
+                Text(
+                    "Not stocked (left out of your rating): ${k.notStocked.joinToString()}. Change this in Kitchen details.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
 
             // ---- photos per category ----
             selected.forEach { cat ->
                 val list = photos[cat].orEmpty()
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("$cat · ${list.size} photo${if (list.size == 1) "" else "s"}", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "$cat · ${list.size} photo${if (list.size == 1) "" else "s"} · " +
+                                "${HygieneScore.CATEGORY_WEIGHTS[cat] ?: 0} points",
+                            fontWeight = FontWeight.SemiBold,
+                        )
                         if (list.isNotEmpty()) {
                             Row(
                                 Modifier.horizontalScroll(rememberScrollState()),
@@ -264,7 +278,7 @@ fun InventoryScreen(vm: AppViewModel, onDone: () -> Unit, onBack: () -> Unit) {
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             ) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Supplier bills (optional)", fontWeight = FontWeight.SemiBold)
+                    Text("Supplier bills (7 points)", fontWeight = FontWeight.SemiBold)
                     Text(
                         "Add a bill if you have one: it improves customer trust, but you can save without it. " +
                             "Add one bill per supplier. If a single bill covers everything, tap \"Covers all categories\". " +
@@ -295,7 +309,7 @@ fun InventoryScreen(vm: AppViewModel, onDone: () -> Unit, onBack: () -> Unit) {
                 }
             }
 
-            ChipPicker("Bought from (optional)", SUPPLIER_TYPES, supplier, multi = false) { supplier = it }
+            ChipPicker("Bought from (required)", SUPPLIER_TYPES, supplier, multi = false) { supplier = it }
             OutlinedTextField(
                 staffName, { staffName = it }, label = { Text("Recorded by (your name)") },
                 singleLine = true, modifier = Modifier.fillMaxWidth(),

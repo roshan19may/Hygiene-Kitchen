@@ -72,8 +72,37 @@ object QrLabel {
         return bmp
     }
 
+    /**
+     * Kitchen hygiene badge for Swiggy / Zomato menu photos, Instagram and Google listings.
+     * The QR opens the kitchen's public page with its live 30-day rating.
+     */
+    fun badgeBitmap(url: String, kitchenName: String, headline: String, detail: String): Bitmap {
+        val w = 720; val h = 1000
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        c.drawColor(Color.rgb(23, 107, 75))
+        val card = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+        c.drawRoundRect(30f, 30f, w - 30f, h - 30f, 36f, 36f, card)
+        fun text(s: String, y: Float, size: Float, bold: Boolean, color: Int = Color.rgb(23, 43, 36)) {
+            val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = color; textSize = size; textAlign = Paint.Align.CENTER
+                typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+            }
+            while (p.measureText(s) > w - 100 && p.textSize > 18f) p.textSize -= 1f
+            c.drawText(s, w / 2f, y, p)
+        }
+        text("KITCHENLENS HYGIENE RATING", 100f, 30f, true, Color.rgb(98, 115, 107))
+        text(kitchenName, 170f, 52f, true)
+        text(headline, 250f, 56f, true, Color.rgb(16, 84, 58))
+        text(detail, 305f, 28f, false, Color.rgb(98, 115, 107))
+        c.drawBitmap(qrBitmap(url, 460), (w - 460) / 2f, 340f, null)
+        text("Scan to see our kitchen's hygiene proof", 860f, 30f, true)
+        text("Rating from recorded hygiene evidence · not an FSSAI rating", 910f, 22f, false, Color.rgb(98, 115, 107))
+        return bmp
+    }
+
     /** Saves the label and opens Android's share sheet (choose your printer app). */
-    fun share(context: Context, label: Bitmap, code: String) {
+    fun share(context: Context, label: Bitmap, code: String, title: String = "Print or share QR seal") {
         val dir = File(context.cacheDir, "labels").apply { mkdirs() }
         val file = File(dir, "seal_$code.png")
         FileOutputStream(file).use { label.compress(Bitmap.CompressFormat.PNG, 100, it) }
@@ -83,6 +112,6 @@ object QrLabel {
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        context.startActivity(Intent.createChooser(intent, "Print or share QR seal"))
+        context.startActivity(Intent.createChooser(intent, title))
     }
 }

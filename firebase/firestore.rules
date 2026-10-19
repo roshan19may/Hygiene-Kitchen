@@ -42,6 +42,34 @@ service cloud.firestore {
       allow delete: if signedIn() && resource.data.kitchenId == myKitchen(); // account deletion only
     }
 
+    // Public kitchen page (kitchen.html?k=ID): profile and 30-day rating, readable by anyone.
+    // The kitchen writes it, but can never set "verifiedVisit" — only KitchenLens staff can
+    // (from the Firebase console, or an account with the custom claim admin=true).
+    match /publicKitchens/{kid} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if signedIn() && myKitchen() == kid && !('verifiedVisit' in request.resource.data);
+      allow update: if (signedIn() && myKitchen() == kid
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['verifiedVisit']))
+        || (signedIn() && request.auth.token.admin == true);
+      allow delete: if signedIn() && myKitchen() == kid;
+    }
+
+    // Customer feedback from the scan page: one answer per seal (document id = seal code),
+    // only for a real order, only two yes/no answers. Kitchens read their own; nobody can edit.
+    match /feedback/{code} {
+      allow create: if exists(/databases/$(database)/documents/orders/$(code))
+        && request.resource.data.keys().hasOnly(['kitchenId', 'sealIntact', 'foodHot', 'at'])
+        && request.resource.data.kitchenId == get(/databases/$(database)/documents/orders/$(code)).data.kitchenId
+        && request.resource.data.sealIntact is bool
+        && request.resource.data.foodHot is bool
+        && request.resource.data.at is int;
+      allow get: if false;
+      allow list: if signedIn() && resource.data.kitchenId == myKitchen();
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.kitchenId == myKitchen(); // account deletion only
+    }
+
     // Public order records: anyone with the exact code can open one (the QR scan),
     // but nobody can list or browse all orders.
     match /orders/{code} {
