@@ -7,6 +7,9 @@ import com.kitchenlens.app.util.HygieneScore
 import com.kitchenlens.app.util.KitchenStats
 import com.kitchenlens.app.util.QrLabel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
@@ -31,21 +34,27 @@ class LocalRepository(context: Context) : KitchenRepository {
     /** Optional free cloud storage so photos and clips show when a seal is scanned. */
     val cloud = CloudMedia(context)
 
-    /** Best-effort early upload, so creating the QR later is quick. Errors are retried at QR time. */
-    private suspend fun preUpload(urls: List<String>, video: Boolean) {
-        if (!cloud.isConfigured) return
-        urls.forEach { u -> runCatching { cloud.ensureUploaded(u, video) } }
+    /**
+     * Early upload in the BACKGROUND: saving no longer waits for cloud storage.
+     * Anything not finished (or failed) is picked up when the QR seal is created.
+     */
+    private fun preUpload(urls: List<String>, video: Boolean) {
+        urls.forEach { u -> cloud.startUpload(u, video) }
     }
 
-    /** Adds Cloudinary IDs to every photo/clip in the hygiene snapshot (uploads what's missing). */
+    override fun prefetch(kitchen: Kitchen, file: File, video: Boolean) {
+        cloud.startUpload(file.absolutePath, video)
+    }
+
+    /** Adds Cloudinary IDs to every photo/clip in the hygiene snapshot; missing ones upload in parallel. */
     private suspend fun withCloudIds(latest: Map<String, Map<String, Any?>>, onStep: () -> Unit): Map<String, Map<String, Any?>> =
-        latest.mapValues { (_, e) ->
-            @Suppress("UNCHECKED_CAST")
-            val urls = (e["mediaUrls"] as? List<*>)?.filterIsInstance<String>()?.takeIf { it.isNotEmpty() }
-                ?: listOfNotNull(e["mediaUrl"] as? String)
-            val video = e["mediaType"] == MediaType.VIDEO.value
-            val ids = urls.map { u -> cloud.ensureUploaded(u, video).also { onStep() } }
-            e + ("cloudIds" to ids)
+        coroutineScope {
+            latest.mapValues { (_, e) ->
+                val urls = (e["mediaUrls"] as? List<*>)?.filterIsInstance<String>()?.takeIf { it.isNotEmpty() }
+                    ?: listOfNotNull(e["mediaUrl"] as? String)
+                val video = e["mediaType"] == MediaType.VIDEO.value
+                e to urls.map { u -> async { cloud.ensureUploaded(u, video).also { onStep() } } }
+            }.mapValues { (_, v) -> v.first + ("cloudIds" to v.second.awaitAll()) }
         }
 
     override val isDemo = true
@@ -105,7 +114,9 @@ class LocalRepository(context: Context) : KitchenRepository {
     private fun copyIn(file: File, ext: String): String {
         val dest = File(mediaDir, UUID.randomUUID().toString() + "." + ext)
         file.copyTo(dest, overwrite = true)
-        return Uri.fromFile(dest).toString()
+        val url = Uri.fromFile(dest).toString()
+        cloud.alias(url, file.absolutePath)   // reuse an upload that started when the photo was taken
+        return url
     }
 
     @Suppress("UNCHECKED_CAST")

@@ -3,7 +3,28 @@ import Foundation
 /// Free cloud storage for photos and clips in demo mode, using the kitchen's own
 /// Cloudinary account (same as the Android app). The QR carries only short IDs.
 /// Setup in Cloudinary: Settings > Upload > Upload presets > Add, Signing mode "Unsigned".
+@MainActor
 final class CloudMedia {
+    /// Uploads already running in the background, by local file id.
+    private var pending: [String: Task<String, Error>] = [:]
+
+    /// Starts uploading in the background; ensureUploaded() later reuses the result.
+    func startUpload(localId: String, file: URL, video: Bool) {
+        guard isConfigured, cachedId(localId) == nil, pending[localId] == nil else { return }
+        pending[localId] = Task { try await self.uploadAndRemember(localId: localId, file: file, video: video) }
+    }
+
+    /// The file behind [from] was copied to [to]: both share one upload.
+    func alias(_ to: String, from: String) {
+        if let id = cachedId(from) { defaults.set(id, forKey: prefix + "id:" + to); return }
+        guard let started = pending[from] else { return }
+        pending[to] = Task {
+            let id = try await started.value
+            self.defaults.set(id, forKey: self.prefix + "id:" + to)
+            return id
+        }
+    }
+
     private let defaults = UserDefaults.standard
     private let prefix = "cloud_media."
 
@@ -24,6 +45,13 @@ final class CloudMedia {
 
     /// Uploads a file once; later calls return the cached Cloudinary ID.
     func ensureUploaded(localId: String, file: URL, video: Bool) async throws -> String {
+        if let id = cachedId(localId) { return id }
+        // Already uploading in the background? Wait for that instead of sending it twice.
+        if let started = pending.removeValue(forKey: localId), let id = try? await started.value { return id }
+        return try await uploadAndRemember(localId: localId, file: file, video: video)
+    }
+
+    private func uploadAndRemember(localId: String, file: URL, video: Bool) async throws -> String {
         if let id = cachedId(localId) { return id }
         guard FileManager.default.fileExists(atPath: file.path) else {
             throw AppError("A photo or clip is missing from this phone. Please record it again.")

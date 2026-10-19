@@ -328,3 +328,36 @@ It shows on reports and the kitchen page for 60 days.
 
 The rating measures recorded process evidence. It is not an inspection and not a guarantee that
 a meal is safe.
+
+## Speed improvements
+
+**Taking photos**
+- Android captures about 2 MP with the fastest shutter mode instead of the full 12–50 MP sensor,
+  so the shutter, saving and processing take a fraction of the time.
+- Photos are saved at 1280 px, quality 78: about 150–250 KB each instead of 400–600 KB. Bills keep
+  1600 px so their dates and GST numbers stay readable.
+- iPhone resizes photos in the background, so the screen no longer freezes after each photo, and
+  on-screen thumbnails use small cached copies instead of decoding the full photo every time.
+
+**Uploading**
+- Each photo or clip starts uploading **as soon as it is taken**, while staff fill in the rest of
+  the form. Pressing Save usually finds the upload already finished.
+- Several photos upload **at the same time** (up to 4) instead of one after another.
+- Demo mode (Cloudinary): saving no longer waits for the upload. It continues in the background,
+  and anything left over is finished when the QR seal is created.
+- iPhone clips are re-encoded to 720p at 1.5 Mbit/s (same as Android): about 4 MB for 20 seconds
+  instead of 15–30 MB.
+- Recorded packing clips are moved into the draft instantly instead of being copied.
+
+**Opening images**
+- Every photo also gets a ~20 KB preview copy. Reports and the app show these as thumbnails, so
+  they appear instantly; the full photo loads only when tapped.
+- The photo viewer shows the preview at once and swaps in the full photo when it arrives, and it
+  loads the next and previous photos in the background so swiping is instant.
+- Uploaded files are marked cacheable, so a customer's phone downloads each photo only once.
+- Report page: no web fonts to wait for, early connections to the photo servers, and Cloudinary
+  clips show a still frame until Play is tapped (no video download before that) and are served
+  at 720p in the best format for the phone.
+
+Seals created before this update have no preview copies; their thumbnails still work, just
+more slowly.

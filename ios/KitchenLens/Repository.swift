@@ -31,9 +31,15 @@ protocol KitchenRepository: AnyObject {
     func recentFeedback(kitchenId: String, since: Int64) async throws -> [(Bool, Bool)]
     /// Publishes the public kitchen page (profile and 30-day rating).
     func publishKitchen(_ kitchen: Kitchen, stats: KitchenStats) async throws
+    /// Background upload as soon as a photo or clip is captured.
+    func prefetch(_ kitchen: Kitchen, file: URL, video: Bool)
 }
 
 extension KitchenRepository {
+    /// Starts uploading a photo or clip in the background as soon as it is captured,
+    /// so Save only waits for what is left. Demo and live mode override this.
+    func prefetch(_ kitchen: Kitchen, file: URL, video: Bool) {}
+
     /// The kitchen's 30-day rating from its rolling order list, spot checks and customer feedback.
     func kitchenStats(_ k: Kitchen, now: Int64 = nowMs()) async -> KitchenStats {
         let feedback = (try? await recentFeedback(kitchenId: k.id, since: now - KitchenStats.windowDays * 24 * 3_600_000)) ?? []
@@ -74,6 +80,7 @@ final class LocalRepository: KitchenRepository {
     private func copyIn(_ file: URL, ext: String) throws -> String {
         let name = UUID().uuidString + "." + ext
         try FileManager.default.copyItem(at: file, to: mediaDir.appendingPathComponent(name))
+        cloud.alias("local:" + name, from: file.path)   // reuse an upload that started when the photo was taken
         return "local:" + name
     }
     func fileFor(_ localUrl: String) -> URL? {
@@ -123,9 +130,14 @@ final class LocalRepository: KitchenRepository {
     func getKitchen(_ id: String) async throws -> Kitchen { Kitchen.from(id: id, kitchenMap) }
 
     /// Best-effort early upload so creating the QR later is quick.
-    private func preUpload(_ urls: [String], video: Bool) async {
-        guard cloud.isConfigured else { return }
-        for u in urls { if let f = fileFor(u) { _ = try? await cloud.ensureUploaded(localId: u, file: f, video: video) } }
+    /// Early upload in the BACKGROUND: saving no longer waits for cloud storage.
+    /// Anything unfinished (or failed) is picked up when the QR seal is created.
+    private func preUpload(_ urls: [String], video: Bool) {
+        for u in urls { if let f = fileFor(u) { cloud.startUpload(localId: u, file: f, video: video) } }
+    }
+
+    func prefetch(_ kitchen: Kitchen, file: URL, video: Bool) {
+        cloud.startUpload(localId: file.path, file: file, video: video)
     }
 
     private func commit(_ kitchen: Kitchen, summaries: [String: [String: Any]], newHashes: [String], logs: [[String: Any]]) {
@@ -144,7 +156,7 @@ final class LocalRepository: KitchenRepository {
     func saveLog(kitchen: Kitchen, section: Section, key: String, staffName: String, media: URL, mediaType: MediaType,
                  details: [String: String], label: String, photoHash: String?, progress: @escaping (Double) -> Void) async throws {
         let url = try copyIn(media, ext: mediaType == .video ? "mp4" : "jpg")
-        await preUpload([url], video: mediaType == .video)
+        preUpload([url], video: mediaType == .video)
         progress(1)
         let now = nowMs()
         if section == .SPOT {
@@ -168,7 +180,7 @@ final class LocalRepository: KitchenRepository {
         var photoUrls: [String: [String]] = [:]
         for (cat, list) in photos { photoUrls[cat] = try list.map { try copyIn($0.file, ext: "jpg") } }
         let billUrls = try bills.map { try copyIn($0.file, ext: "jpg") }
-        await preUpload(photoUrls.values.flatMap { $0 }, video: false)
+        preUpload(photoUrls.values.flatMap { $0 }, video: false)
         progress(1)
         let now = nowMs()
         let records = buildInventoryRecords(photoUrls: photoUrls, bills: bills, billUrls: billUrls, supplierType: supplierType)
@@ -187,6 +199,13 @@ final class LocalRepository: KitchenRepository {
     /// Adds Cloudinary IDs to every photo and clip in the hygiene snapshot (uploads what's missing).
     private func withCloudIds(_ latest: [String: [String: Any]], step: () -> Void) async throws -> [String: [String: Any]] {
         var out: [String: [String: Any]] = [:]
+        // Start every missing upload at once, then collect the IDs (they upload in parallel)
+        for e in latest.values {
+            var urls = e["mediaUrls"] as? [String] ?? []
+            if urls.isEmpty, let u = e["mediaUrl"] as? String { urls = [u] }
+            let video = (e["mediaType"] as? String) == MediaType.video.rawValue
+            for u in urls { if let f = fileFor(u) { cloud.startUpload(localId: u, file: f, video: video) } }
+        }
         for (key, e) in latest {
             var urls = e["mediaUrls"] as? [String] ?? []
             if urls.isEmpty, let u = e["mediaUrl"] as? String { urls = [u] }

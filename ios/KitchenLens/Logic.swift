@@ -138,12 +138,14 @@ func publicKitchenMap(_ k: Kitchen, _ stats: KitchenStats) -> [String: Any] {
 
 /// Public summary kept under kitchen.latest; bill photos and supplier GSTINs stay private.
 func publicSummary(at: Int64, mediaUrl: String, mediaType: MediaType, label: String,
-                   details: [String: String], mediaUrls: [String] = []) -> [String: Any] {
+                   details: [String: String], mediaUrls: [String] = [], mediaThumbs: [String] = []) -> [String: Any] {
     var m: [String: Any] = [
         "at": at, "mediaUrl": mediaUrl, "mediaType": mediaType.rawValue, "label": label,
         "details": details.filter { !PRIVATE_DETAIL_KEYS.contains($0.key) },
     ]
     if !mediaUrls.isEmpty { m["mediaUrls"] = mediaUrls }
+    // Small preview copies in the same order as the photos (fast thumbnails on the report)
+    if mediaThumbs.contains(where: { !$0.isEmpty }) { m["mediaThumbs"] = mediaThumbs }
     return m
 }
 

@@ -152,7 +152,7 @@ struct CameraView: UIViewControllerRepresentable {
             picker.mediaTypes = ["public.movie"]
             picker.cameraCaptureMode = .video
             picker.videoMaximumDuration = 20
-            picker.videoQuality = .typeHigh
+            picker.videoQuality = .typeHigh   // re-encoded to 720p at 1.5 Mbit/s after recording (VideoTools)
         } else {
             picker.mediaTypes = ["public.image"]
             picker.cameraCaptureMode = .photo
@@ -243,7 +243,8 @@ struct Thumb: View {
     var onRemove: (() -> Void)? = nil
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            if let img = UIImage(contentsOfFile: url.path) {
+            // Small cached copy: decoding the full photo on every redraw made screens slow
+            if let img = ImageTools.preview(url, maxPixel: 252) {
                 Image(uiImage: img).resizable().scaledToFill().frame(width: 84, height: 84).clipped()
                     .clipShape(RoundedRectangle(cornerRadius: 10))
             }

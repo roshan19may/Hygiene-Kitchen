@@ -138,6 +138,7 @@ fun PackingScreen(vm: AppViewModel, onCreated: (String) -> Unit, onBack: () -> U
                 clip = f; clipSeconds = s; recording = false
                 clipRecordedAt = System.currentTimeMillis() - s * 1000L
                 saveDraft() // never lose a recorded clip
+                clip?.let { vm.repo.prefetch(k, it, video = true) }   // upload while the form is filled in
             },
             onCancel = { recording = false },
         )

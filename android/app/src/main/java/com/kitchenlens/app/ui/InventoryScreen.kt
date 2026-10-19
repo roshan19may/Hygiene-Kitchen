@@ -130,7 +130,11 @@ fun InventoryScreen(vm: AppViewModel, onDone: () -> Unit, onBack: () -> Unit) {
                 working = true
                 scope.launch {
                     try {
-                        val (small, hash) = withContext(Dispatchers.Default) { ImageTools.compress(file, context.cacheDir) }
+                        // Bills keep more detail so the date and GST number can be read
+                        val (small, hash) = withContext(Dispatchers.Default) {
+                            ImageTools.compress(file, context.cacheDir, maxSide = if (forBill) 1600 else ImageTools.MAX_SIDE)
+                        }
+                        vm.repo.prefetch(k, small, video = false)   // start uploading now, while the form is filled
                         if (forBill) {
                             val id = UUID.randomUUID().toString()
                             bills.add(BillDraft(id, small, cats, note = "Reading the bill…"))

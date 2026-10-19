@@ -84,6 +84,7 @@ struct PackingView: View {
                 clipSeconds = secs
                 clipRecordedAt = ended - Int64(secs) * 1000
                 saveDraft(newClip: url)   // never lose a recorded clip
+                if let c = clip, let k = model.kitchen { model.repo.prefetch(k, file: c, video: true) }   // upload while the form is filled in
                 error = nil
             } catch { self.error = error.localizedDescription }
         }

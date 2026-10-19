@@ -199,7 +199,8 @@ private fun ProofRow(entry: Map<String, Any?>, packedAt: Long) {
             val url = entry["mediaUrl"] as? String
             val urls = (entry["mediaUrls"] as? List<*>)?.filterIsInstance<String>().orEmpty().ifEmpty { listOfNotNull(url) }
             // Photos: thumbnails always visible, tap to enlarge
-            if (!isVideo) PhotoThumbs(urls, entry["label"] as? String ?: "Photo")
+            val thumbs = (entry["mediaThumbs"] as? List<*>)?.map { it as? String ?: "" }.orEmpty()
+            if (!isVideo) PhotoThumbs(urls, entry["label"] as? String ?: "Photo", thumbs = thumbs)
             if (open && isVideo) {
                 ClipPlayer(url, (entry["details"] as? Map<*, *>)?.get("recordedAt")?.toString()?.toLongOrNull() ?: at)
             }

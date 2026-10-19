@@ -87,6 +87,12 @@ interface KitchenRepository {
      */
     suspend fun deleteAccount(password: String)
 
+    /**
+     * Starts uploading a photo or clip in the background as soon as it is captured, so that
+     * pressing Save later only has to wait for whatever is left. Safe to call more than once.
+     */
+    fun prefetch(kitchen: Kitchen, file: File, video: Boolean) {}
+
     /** Customer answers from the last 30 days: (seal intact, food at the right temperature). Live mode only. */
     suspend fun recentFeedback(kitchenId: String, since: Long): List<Pair<Boolean, Boolean>>
 
@@ -147,6 +153,7 @@ fun publicSummary(
     label: String,
     details: Map<String, String>,
     mediaUrls: List<String> = emptyList(),
+    mediaThumbs: List<String> = emptyList(),
 ): Map<String, Any> {
     val m = mutableMapOf<String, Any>(
         "at" to at,
@@ -156,6 +163,8 @@ fun publicSummary(
         "details" to details.filterKeys { it !in PRIVATE_DETAIL_KEYS },
     )
     if (mediaUrls.isNotEmpty()) m["mediaUrls"] = mediaUrls
+    // Small preview copies, in the same order as the photos (fast thumbnails on the report)
+    if (mediaThumbs.isNotEmpty() && mediaThumbs.any { it.isNotBlank() }) m["mediaThumbs"] = mediaThumbs
     return m
 }
 

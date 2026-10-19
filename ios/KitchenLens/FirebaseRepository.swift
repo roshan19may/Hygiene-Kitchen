@@ -55,10 +55,48 @@ final class FirebaseRepository: KitchenRepository {
         return Kitchen.from(id: id, snap.data() ?? [:])
     }
 
+    // ---------- Fast uploads ----------
+    // Uploads start in the background as soon as a photo or clip is captured (prefetch),
+    // several files go at once, every photo gets a ~20 KB thumbnail, and files are cacheable.
+    private var pending: [String: Task<(url: String, thumb: String), Error>] = [:]
+
+    func prefetch(_ kitchen: Kitchen, file: URL, video: Bool) {
+        guard pending[file.path] == nil else { return }
+        let kid = kitchen.id
+        pending[file.path] = Task { try await self.send(kid, file, video, progress: nil) }
+    }
+
+    /// Uses the background upload if one was started (and worked), otherwise uploads now.
+    private func uploadMedia(_ kitchenId: String, _ file: URL, video: Bool,
+                             progress: ((Double) -> Void)? = nil) async throws -> (url: String, thumb: String) {
+        if let started = pending.removeValue(forKey: file.path), let done = try? await started.value {
+            progress?(1)
+            return done
+        }
+        return try await send(kitchenId, file, video, progress: progress)
+    }
+
+    private func send(_ kitchenId: String, _ file: URL, _ video: Bool, progress: ((Double) -> Void)?) async throws -> (url: String, thumb: String) {
+        let base = "kitchens/\(kitchenId)/logs/\(UUID().uuidString)"
+        if video { return (try await upload(file, path: base + ".mp4", contentType: "video/mp4", progress: progress), "") }
+        async let thumb = uploadThumb(file, path: base + "_t.jpg")
+        let main = try await upload(file, path: base + ".jpg", contentType: "image/jpeg", progress: progress)
+        return (main, await thumb)
+    }
+
+    /// ~20 KB preview copy; an empty string if it could not be made (the full photo is then used).
+    private func uploadThumb(_ file: URL, path: String) async -> String {
+        guard let t = ImageTools.thumbnail(file) else { return "" }
+        defer { try? FileManager.default.removeItem(at: t) }
+        return (try? await upload(t, path: path, contentType: "image/jpeg")) ?? ""
+    }
+
     private func upload(_ file: URL, path: String, contentType: String, progress: ((Double) -> Void)? = nil) async throws -> String {
         let ref = storage.reference().child(path)
         let meta = StorageMetadata()
         meta.contentType = contentType
+        // Files never change once uploaded, so browsers may keep them for a year
+        meta.cacheControl = "public, max-age=31536000, immutable"
         _ = try await ref.putFileAsync(from: file, metadata: meta) { p in
             if let p, p.totalUnitCount > 0 { progress?(Double(p.completedUnitCount) / Double(p.totalUnitCount)) }
         }
@@ -68,9 +106,8 @@ final class FirebaseRepository: KitchenRepository {
     func saveLog(kitchen: Kitchen, section: Section, key: String, staffName: String, media: URL, mediaType: MediaType,
                  details: [String: String], label: String, photoHash: String?, progress: @escaping (Double) -> Void) async throws {
         let id = UUID().uuidString
-        let video = mediaType == .video
-        let mediaUrl = try await upload(media, path: "kitchens/\(kitchen.id)/logs/\(id).\(video ? "mp4" : "jpg")",
-                                        contentType: video ? "video/mp4" : "image/jpeg", progress: progress)
+        let uploaded = try await uploadMedia(kitchen.id, media, video: mediaType == .video, progress: progress)
+        let mediaUrl = uploaded.url
         let now = nowMs()
         let kitchenRef = db.collection("kitchens").document(kitchen.id)
         var updates: [String: Any] = [:]
@@ -80,7 +117,8 @@ final class FirebaseRepository: KitchenRepository {
         } else {
             var d = details
             d["recordedBy"] = recordedBy(staffName)
-            updates["latest.\(key)"] = publicSummary(at: now, mediaUrl: mediaUrl, mediaType: mediaType, label: label, details: d)
+            updates["latest.\(key)"] = publicSummary(at: now, mediaUrl: mediaUrl, mediaType: mediaType, label: label, details: d,
+                                                     mediaThumbs: [uploaded.thumb])
         }
         if let h = photoHash { updates["recentHashes"] = Array(([h] + kitchen.recentHashes).prefix(60)) }
         let batch = db.batch()
@@ -94,22 +132,26 @@ final class FirebaseRepository: KitchenRepository {
 
     func saveInventory(kitchen: Kitchen, staffName: String, supplierType: String?, photos: [String: [InventoryPhoto]],
                        bills: [InventoryBill], progress: @escaping (Double) -> Void) async throws {
-        let batchId = String(UUID().uuidString.prefix(8))
         let total = Double(photos.values.reduce(0) { $0 + $1.count } + bills.count)
         var done = 0.0
+        // Start every upload at once (those already prefetched are reused), then collect them in order
+        for list in photos.values { for p in list { prefetch(kitchen, file: p.file, video: false) } }
+        for b in bills { prefetch(kitchen, file: b.file, video: false) }
         var photoUrls: [String: [String]] = [:]
+        var photoThumbs: [String: [String]] = [:]
         for (cat, list) in photos {
-            let safe = cat.filter { $0.isLetter }
-            var urls: [String] = []
-            for (i, p) in list.enumerated() {
-                urls.append(try await upload(p.file, path: "kitchens/\(kitchen.id)/logs/\(batchId)_\(safe)_\(i).jpg", contentType: "image/jpeg"))
+            var urls: [String] = [], thumbs: [String] = []
+            for p in list {
+                let up = try await uploadMedia(kitchen.id, p.file, video: false)
+                urls.append(up.url); thumbs.append(up.thumb)
                 done += 1; progress(done / max(1, total))
             }
             photoUrls[cat] = urls
+            photoThumbs[cat] = thumbs
         }
         var billUrls: [String] = []
-        for (i, b) in bills.enumerated() {
-            billUrls.append(try await upload(b.file, path: "kitchens/\(kitchen.id)/logs/\(batchId)_bill_\(i).jpg", contentType: "image/jpeg"))
+        for b in bills {
+            billUrls.append(try await uploadMedia(kitchen.id, b.file, video: false).url)
             done += 1; progress(done / max(1, total))
         }
         let records = buildInventoryRecords(photoUrls: photoUrls, bills: bills, billUrls: billUrls, supplierType: supplierType)
@@ -121,7 +163,7 @@ final class FirebaseRepository: KitchenRepository {
             var d = r.details
             d["recordedBy"] = recordedBy(staffName)
             updates["latest.\(r.key)"] = publicSummary(at: now, mediaUrl: r.mediaUrls[0], mediaType: .photo, label: r.label,
-                                                      details: d, mediaUrls: r.mediaUrls)
+                                                      details: d, mediaUrls: r.mediaUrls, mediaThumbs: photoThumbs[r.category] ?? [])
             batch.setData(["section": "INVENTORY", "key": r.key, "staffName": staffName.trimmingCharacters(in: .whitespaces),
                            "mediaType": "photo", "mediaUrl": r.mediaUrls[0], "mediaUrls": r.mediaUrls, "details": r.details,
                            "label": r.label, "capturedAtMillis": now, "createdAt": FieldValue.serverTimestamp()],
@@ -145,7 +187,14 @@ final class FirebaseRepository: KitchenRepository {
             code = newSealCode()
         }
 
-        let clipUrl = try await upload(clip, path: "kitchens/\(kitchen.id)/orders/\(code).mp4", contentType: "video/mp4", progress: progress)
+        // Usually already uploaded in the background while the packer filled in the form
+        let clipUrl: String
+        if let started = pending.removeValue(forKey: clip.path), let done = try? await started.value {
+            clipUrl = done.url
+            progress(1)
+        } else {
+            clipUrl = try await upload(clip, path: "kitchens/\(kitchen.id)/orders/\(code).mp4", contentType: "video/mp4", progress: progress)
+        }
         let fresh = try await getKitchen(kitchen.id)
         let now = nowMs()
         let tempOk = HygieneScore.temperatureOk(foodType: foodType, tempC: tempC)

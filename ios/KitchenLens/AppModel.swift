@@ -34,7 +34,9 @@ final class DraftStore {
         var d = draft
         if let src = newClip, src.deletingLastPathComponent().standardizedFileURL != dir.standardizedFileURL {
             let name = "clip_\(nowMs()).mp4"
-            try? FileManager.default.copyItem(at: src, to: dir.appendingPathComponent(name))
+            // Move (instant) rather than copy a multi-MB clip; copy only if moving fails
+            let dest = dir.appendingPathComponent(name)
+            if (try? FileManager.default.moveItem(at: src, to: dest)) == nil { try? FileManager.default.copyItem(at: src, to: dest) }
             d.clipFile = name
         }
         // Remove clips that no longer belong to the draft

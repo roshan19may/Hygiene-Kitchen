@@ -49,7 +49,7 @@ import coil.compose.AsyncImage
 
 /** Row of small square thumbnails; tapping one opens the full-screen viewer. */
 @Composable
-fun PhotoThumbs(urls: List<String>, title: String, max: Int = 4) {
+fun PhotoThumbs(urls: List<String>, title: String, max: Int = 4, thumbs: List<String> = emptyList()) {
     if (urls.isEmpty()) return
     var viewerAt by remember { mutableStateOf<Int?>(null) }
     val shown = urls.take(max)
@@ -64,7 +64,9 @@ fun PhotoThumbs(urls: List<String>, title: String, max: Int = 4) {
                         .clickable { viewerAt = i },
                 ) {
                     AsyncImage(
-                        model = u, contentDescription = "Enlarge $title photo ${i + 1}",
+                        // Small preview copy when there is one (much faster than the full photo)
+                        model = thumbs.getOrNull(i)?.takeIf { it.isNotBlank() } ?: u,
+                        contentDescription = "Enlarge $title photo ${i + 1}",
                         contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize(),
                     )
                     if (i == shown.lastIndex && extra > 0) {
@@ -77,7 +79,7 @@ fun PhotoThumbs(urls: List<String>, title: String, max: Int = 4) {
         }
         Text("Tap a photo to enlarge", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
     }
-    viewerAt?.let { start -> PhotoViewer(urls, title, start) { viewerAt = null } }
+    viewerAt?.let { start -> PhotoViewer(urls, title, start, thumbs) { viewerAt = null } }
 }
 
 /**
@@ -85,8 +87,15 @@ fun PhotoThumbs(urls: List<String>, title: String, max: Int = 4) {
  * arrows (or swipe when not zoomed) to move between photos.
  */
 @Composable
-fun PhotoViewer(urls: List<String>, title: String, start: Int, onClose: () -> Unit) {
+fun PhotoViewer(urls: List<String>, title: String, start: Int, thumbs: List<String> = emptyList(), onClose: () -> Unit) {
     var index by remember { mutableIntStateOf(start.coerceIn(0, urls.lastIndex)) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // Load the next and previous photos in the background so swiping is instant
+    androidx.compose.runtime.LaunchedEffect(index) {
+        listOf(index + 1, index - 1).map { (it + urls.size) % urls.size }.distinct().filter { it != index }.forEach { i ->
+            coil.Coil.imageLoader(context).enqueue(coil.request.ImageRequest.Builder(context).data(urls[i]).build())
+        }
+    }
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var swipe by remember { mutableFloatStateOf(0f) }
@@ -130,13 +139,19 @@ fun PhotoViewer(urls: List<String>, title: String, start: Int, onClose: () -> Un
                     },
                 contentAlignment = Alignment.Center,
             ) {
+                val layer = Modifier.fillMaxSize().graphicsLayer {
+                    scaleX = scale; scaleY = scale
+                    translationX = offset.x; translationY = offset.y
+                }
+                // The small preview (already loaded for the thumbnail) shows at once; the full photo fades in over it
+                thumbs.getOrNull(index)?.takeIf { it.isNotBlank() }?.let { t ->
+                    AsyncImage(model = t, contentDescription = null, contentScale = ContentScale.Fit, modifier = layer)
+                }
                 AsyncImage(
-                    model = urls[index], contentDescription = "$title photo ${index + 1}",
+                    model = coil.request.ImageRequest.Builder(context).data(urls[index]).crossfade(true).build(),
+                    contentDescription = "$title photo ${index + 1}",
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize().graphicsLayer {
-                        scaleX = scale; scaleY = scale
-                        translationX = offset.x; translationY = offset.y
-                    },
+                    modifier = layer,
                 )
                 if (urls.size > 1) {
                     val arrowColors = IconButtonDefaults.iconButtonColors(containerColor = Color(0x33FFFFFF), contentColor = Color.White)

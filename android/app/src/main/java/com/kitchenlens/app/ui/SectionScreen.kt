@@ -146,6 +146,7 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
                 if (!photoMode) {
                     mainFile = file; mainSeconds = secs
                     capturedAt = System.currentTimeMillis() - secs * 1000L
+                    vm.repo.prefetch(k, file, video = true)   // start uploading now, while the form is filled
                 } else {
                     working = true
                     scope.launch {
@@ -155,6 +156,7 @@ fun SectionScreen(vm: AppViewModel, section: Section, onDone: () -> Unit, onBack
                                 error = "This photo looks the same as an earlier upload. Please take a fresh photo."
                             } else {
                                 mainFile = small; photoHash = hash; error = null
+                                vm.repo.prefetch(k, small, video = false)
                             }
                         } catch (e: Exception) {
                             error = e.message

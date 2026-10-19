@@ -8,9 +8,10 @@
 <meta name="description" content="View the kitchen-recorded hygiene and food packing details linked to your order seal.">
 <meta name="theme-color" content="#176b4b">
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<!-- Speed: open connections to the data and photo servers while the page loads (no web fonts to wait for) -->
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://firebasestorage.googleapis.com">
+<link rel="preconnect" href="https://res.cloudinary.com">
 <style>
 
 :root {
@@ -399,7 +400,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   /* Media stored in the kitchen's free Cloudinary account; the QR carries only IDs */
   function cloudUrl(cl, id, video) {
     if (!cl || !id) return "";
-    var base = "https://res.cloudinary.com/" + encodeURIComponent(cl) + (video ? "/video/upload/q_auto/" : "/image/upload/f_auto,q_auto,w_900/");
+    // Videos are re-encoded by Cloudinary to 720 px in the best format for the phone (much smaller)
+    var base = "https://res.cloudinary.com/" + encodeURIComponent(cl) + (video ? "/video/upload/q_auto,vc_auto,w_720/" : "/image/upload/f_auto,q_auto,w_900/");
     return base + String(id).split("/").map(encodeURIComponent).join("/") + (video ? ".mp4" : "");
   }
   function fromOffline(p) {
@@ -544,7 +546,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     var start = Number(startMs) || 0;
     return '<div class="stamped" data-start="' + start + '">' +
       (start ? '<span class="tstamp">' + esc(stampText(start)) + "</span>" : "") +
-      '<video src="' + esc(url) + '" controls muted playsinline preload="metadata"></video></div>';
+      '<video src="' + esc(url) + '"' + (posterUrl(url) ? ' poster="' + esc(posterUrl(url)) + '" preload="none"' : ' preload="metadata"') +
+      ' controls muted playsinline></video></div>';
   }
   function wireStamps(root) {
     root.querySelectorAll(".stamped").forEach(function (box) {
@@ -563,12 +566,23 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   function tone(score) { return score >= 80 ? "ok" : score >= 50 ? "warn" : "bad"; }
 
   /* Small square thumbnail URL (Cloudinary resizes on the fly; other hosts use the original) */
+  /* Still frame shown before a Cloudinary clip plays (no video download until Play is tapped) */
+  function posterUrl(u) {
+    u = String(u || "");
+    if (u.indexOf("/video/upload/q_auto,vc_auto,w_720/") < 0) return "";
+    return u.replace("/video/upload/q_auto,vc_auto,w_720/", "/video/upload/so_1,w_720,q_auto,f_jpg/").replace(/\.mp4$/, ".jpg");
+  }
   function thumbUrl(u) {
     return String(u).replace("/image/upload/f_auto,q_auto,w_900/", "/image/upload/c_fill,w_240,h_240,f_auto,q_auto/");
   }
   /* Full-size URL for the viewer */
   function fullUrl(u) {
-    return String(u).replace("/image/upload/f_auto,q_auto,w_900/", "/image/upload/f_auto,q_auto,w_1800/");
+    return String(u).replace("/image/upload/f_auto,q_auto,w_900/", "/image/upload/f_auto,q_auto,w_1600/");
+  }
+  /* Thumbnail for photo j: the app's uploaded preview copy if there is one, else a resized Cloudinary URL */
+  function thumbFor(entry, j, u) {
+    var t = entry && entry.mediaThumbs && safeUrl(entry.mediaThumbs[j]);
+    return t || thumbUrl(u);
   }
   function photoUrls(entry) {
     if (!entry || entry.mediaType === "video") return [];
@@ -585,7 +599,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
       var last = j === shown.length - 1 && extra > 0;
       return '<button type="button" class="thumb" data-row="' + rowIndex + '" data-ph="' + j + '" aria-label="Enlarge ' +
         esc(entry.label) + " photo " + (j + 1) + " of " + urls.length + '">' +
-        '<img src="' + esc(thumbUrl(u)) + '" alt="" loading="lazy">' +
+        '<img src="' + esc(thumbFor(entry, j, u)) + '" alt="" loading="lazy" decoding="async" width="76" height="76">' +
         (last ? '<span class="more">+' + extra + "</span>" : "") + "</button>";
     }).join("") + '</div><div class="thumbhint">Tap a photo to enlarge</div>';
   }
@@ -596,7 +610,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     if (entry.mediaType !== "video" && many.length > 1) {
       return '<div class="gallery">' + many.map(function (u, i) {
         return '<button type="button" class="thumb" data-row="' + rowIndex + '" data-ph="' + i + '" aria-label="Enlarge ' +
-          esc(entry.label) + " photo " + (i + 1) + '"><img src="' + esc(u) + '" alt="' + esc(entry.label) + " photo " + (i + 1) + '" loading="lazy"></button>';
+          esc(entry.label) + " photo " + (i + 1) + '"><img src="' + esc(thumbFor(entry, i, u)) + '" alt="' + esc(entry.label) + " photo " + (i + 1) + '" loading="lazy" decoding="async"></button>';
       }).join("") + "</div>";
     }
     if (!url && offline) return '<div class="placeholder">This ' + (entry.mediaType === "video" ? "clip" : "photo") + " is stored on the kitchen's phone. It appears here once the kitchen connects cloud storage.</div>";
@@ -608,7 +622,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   }
 
   /* ---------- Full-screen photo viewer with zoom and swipe ---------- */
-  var LB = { photos: [], title: "", i: 0, scale: 1, x: 0, y: 0, opener: null };
+  var LB = { photos: [], thumbs: [], title: "", i: 0, scale: 1, x: 0, y: 0, opener: null, token: 0 };
   function $(id) { return document.getElementById(id); }
   function lbApply() {
     var img = $("lb-img");
@@ -623,17 +637,25 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   function lbShow(i) {
     var n = LB.photos.length;
     LB.i = (i + n) % n; LB.scale = 1; LB.x = 0; LB.y = 0;
-    var u = LB.photos[LB.i];
-    $("lb-img").src = fullUrl(u);
+    var u = LB.photos[LB.i], full = fullUrl(u), thumb = LB.thumbs[LB.i] || "", img = $("lb-img"), token = ++LB.token;
+    // Show the small preview instantly (already downloaded for the thumbnail), then swap in the full photo
+    img.src = thumb || full;
+    if (thumb && thumb !== full) {
+      var pre = new Image();
+      pre.onload = function () { if (LB.token === token) img.src = full; };
+      pre.src = full;
+    }
+    // Fetch the next and previous photos in the background so swiping is instant
+    if (n > 1) [LB.i + 1, LB.i - 1].forEach(function (k) { new Image().src = fullUrl(LB.photos[(k + n) % n]); });
     $("lb-img").alt = LB.title + " photo " + (LB.i + 1);
     $("lb-open").href = fullUrl(u);
     $("lb-count").textContent = n > 1 ? (LB.i + 1) + " / " + n : "";
     $("lb-prev").hidden = $("lb-next").hidden = n < 2;
     lbApply();
   }
-  function lbOpen(photos, title, start, opener) {
+  function lbOpen(photos, title, start, opener, thumbs) {
     if (!photos.length) return;
-    LB.photos = photos; LB.title = title || "Photo"; LB.opener = opener || null;
+    LB.photos = photos; LB.thumbs = thumbs || []; LB.title = title || "Photo"; LB.opener = opener || null;
     $("lb-title").textContent = LB.title;
     $("lb").hidden = false;
     document.body.style.overflow = "hidden";
@@ -718,7 +740,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
       b.dataset.wired = "1";
       b.addEventListener("click", function () {
         var r = rows[Number(b.getAttribute("data-row"))];
-        lbOpen(photoUrls(r), r && r.label, Number(b.getAttribute("data-ph")) || 0, b);
+        var ph = photoUrls(r);
+        lbOpen(ph, r && r.label, Number(b.getAttribute("data-ph")) || 0, b, ph.map(function (u, j) { return thumbFor(r, j, u); }));
       });
     });
   }

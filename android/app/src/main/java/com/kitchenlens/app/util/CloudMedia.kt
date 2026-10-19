@@ -3,8 +3,15 @@ package com.kitchenlens.app.util
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 import org.json.JSONObject
 import java.io.DataOutputStream
 import java.io.File
@@ -46,12 +53,37 @@ class CloudMedia(context: Context) {
      */
     suspend fun ensureUploaded(localUrl: String, video: Boolean): String {
         cachedId(localUrl)?.let { return it }
+        // Already uploading in the background? Wait for that instead of sending it twice.
+        pending.remove(localUrl)?.let { started -> runCatching { started.await() }.getOrNull()?.let { return it } }
+        return slots.withPermit { uploadAndRemember(localUrl, video) }
+    }
+
+    private suspend fun uploadAndRemember(localUrl: String, video: Boolean): String {
+        cachedId(localUrl)?.let { return it }
         val path = if (localUrl.startsWith("file:")) Uri.parse(localUrl).path.orEmpty() else localUrl
         val file = File(path)
         require(file.exists()) { "A photo or clip is missing from this phone. Please record it again." }
         val id = upload(file, video)
         prefs.edit().putString("id:$localUrl", id).apply()
         return id
+    }
+
+    // ---- Background uploads (start when a photo is taken; up to 3 at a time) ----
+    private val background = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val pending = ConcurrentHashMap<String, Deferred<String>>()
+    private val slots = Semaphore(3)
+
+    /** Starts uploading in the background; [ensureUploaded] later reuses the result. */
+    fun startUpload(localUrl: String, video: Boolean) {
+        if (!isConfigured || cachedId(localUrl) != null || pending.containsKey(localUrl)) return
+        pending[localUrl] = background.async { slots.withPermit { uploadAndRemember(localUrl, video) } }
+    }
+
+    /** The file at [fromUrl] was copied to [toUrl]: both share one upload. */
+    fun alias(toUrl: String, fromUrl: String) {
+        cachedId(fromUrl)?.let { prefs.edit().putString("id:$toUrl", it).apply(); return }
+        val started = pending[fromUrl] ?: return
+        pending[toUrl] = background.async { started.await().also { prefs.edit().putString("id:$toUrl", it).apply() } }
     }
 
     /** Uploads a tiny test image to check the cloud name and preset. */

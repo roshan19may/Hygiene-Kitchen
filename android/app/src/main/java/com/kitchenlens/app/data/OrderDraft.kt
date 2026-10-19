@@ -52,7 +52,8 @@ class DraftStore(context: Context) {
             val src = File(clipPath)
             if (src.exists()) {
                 val dest = File(dir, "clip_${System.currentTimeMillis()}.mp4")
-                src.copyTo(dest, overwrite = true)
+                // Move (instant) rather than copy a multi-MB clip; copy only if moving fails
+                if (!src.renameTo(dest)) src.copyTo(dest, overwrite = true)
                 clipPath = dest.absolutePath
             }
         }

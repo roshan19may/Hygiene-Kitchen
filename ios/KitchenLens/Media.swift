@@ -3,6 +3,7 @@ import AVFoundation
 import Vision
 import CoreImage
 import CoreImage.CIFilterBuiltins
+import ImageIO
 
 /// Folders inside the app's private storage.
 enum AppFiles {
@@ -21,16 +22,51 @@ enum AppFiles {
 }
 
 enum ImageTools {
-    /// Shrinks to at most 1600 px, burns in the date and time, saves a JPEG.
-    /// Returns the file and a fingerprint of the scene (taken before the stamp) for duplicate checks.
-    static func process(_ image: UIImage, takenAt: Date = Date()) throws -> (URL, String) {
-        let resized = resize(image, maxSide: 1600)
+    static let maxSide: CGFloat = 1280
+    static let jpegQuality: CGFloat = 0.78
+
+    /// Shrinks to at most 1280 px (about 150–250 KB, quick to upload on 4G), burns in the date
+    /// and time, saves a JPEG. Returns the file and a fingerprint of the scene for duplicate checks.
+    /// Heavy work: call it off the main thread (Task.detached) so the screen never freezes.
+    static func process(_ image: UIImage, takenAt: Date = Date(), maxSide: CGFloat = ImageTools.maxSide) throws -> (URL, String) {
+        let resized = resize(image, maxSide: maxSide)
         let hash = dHash(resized)
         let stamped = stamp(resized, at: takenAt)
-        guard let data = stamped.jpegData(compressionQuality: 0.8) else { throw AppError("Could not save the photo") }
+        guard let data = stamped.jpegData(compressionQuality: jpegQuality) else { throw AppError("Could not save the photo") }
         let url = AppFiles.newTemp("jpg")
         try data.write(to: url)
         return (url, hash)
+    }
+
+    /// Small preview copy (~20 KB, 360 px) uploaded next to each photo for instant thumbnails.
+    static func thumbnail(_ photo: URL, maxPixel: CGFloat = 360) -> URL? {
+        guard let img = downsample(photo, maxPixel: maxPixel), let data = img.jpegData(compressionQuality: 0.7) else { return nil }
+        let out = AppFiles.newTemp("jpg")
+        return (try? data.write(to: out)) != nil ? out : nil
+    }
+
+    /// Decodes only as many pixels as needed (fast, low memory), using ImageIO.
+    static func downsample(_ url: URL, maxPixel: CGFloat) -> UIImage? {
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary) else { return nil }
+        let opts: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixel,
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
+        return UIImage(cgImage: cg)
+    }
+
+    private static let previewCache = NSCache<NSString, UIImage>()
+
+    /// Cached small version of a local photo for on-screen thumbnails and previews.
+    static func preview(_ url: URL, maxPixel: CGFloat = 300) -> UIImage? {
+        let key = "\(url.path)#\(Int(maxPixel))" as NSString
+        if let hit = previewCache.object(forKey: key) { return hit }
+        guard let img = downsample(url, maxPixel: maxPixel) else { return nil }
+        previewCache.setObject(img, forKey: key)
+        return img
     }
 
     static func resize(_ image: UIImage, maxSide: CGFloat) -> UIImage {
@@ -113,19 +149,106 @@ enum BillReader {
 }
 
 enum VideoTools {
-    /// Copies the clip without its sound track (recipe talk is never kept) and returns
-    /// the new file and its length in seconds.
+    static let maxVideoSide: CGFloat = 1280
+    static let videoBitRate = 1_500_000   // same as Android: about 4 MB for a 20 s clip
+
+    /// Re-encodes the clip WITHOUT its sound track (recipe talk is never kept) at 720p and
+    /// 1.5 Mbit/s, so a 20 s clip is about 4 MB instead of 15–30 MB: much faster to upload
+    /// and to play on the customer's phone. Returns the new file and its length in seconds.
     static func removeAudio(_ input: URL) async throws -> (URL, Int) {
         let asset = AVURLAsset(url: input)
         let duration = try await asset.load(.duration)
         guard let track = try await asset.loadTracks(withMediaType: .video).first else { throw AppError("The clip has no video") }
+        let seconds = Int(CMTimeGetSeconds(duration).rounded())
+        do {
+            let url = try await transcode(asset: asset, track: track)
+            try? FileManager.default.removeItem(at: input)
+            return (url, seconds)
+        } catch {
+            // Fallback: Apple's standard 720p export (bigger file, but always works)
+            let url = try await export(track: track, duration: duration)
+            try? FileManager.default.removeItem(at: input)
+            return (url, seconds)
+        }
+    }
+
+    private final class Flag: @unchecked Sendable { var started = false; var done = false }
+
+    private static func transcode(asset: AVAsset, track: AVAssetTrack) async throws -> URL {
+        let natural = try await track.load(.naturalSize)
+        let transform = try await track.load(.preferredTransform)
+        let scale = min(1, maxVideoSide / max(natural.width, natural.height))
+        let w = Int((natural.width * scale / 2).rounded()) * 2
+        let h = Int((natural.height * scale / 2).rounded()) * 2
+
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+        ])
+        output.alwaysCopiesSampleData = false
+        guard reader.canAdd(output) else { throw AppError("Could not read the clip") }
+        reader.add(output)
+
+        let url = AppFiles.newTemp("mp4")
+        let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+        writer.shouldOptimizeForNetworkUse = true
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: w, AVVideoHeightKey: h,
+            AVVideoScalingModeKey: AVVideoScalingModeResizeAspectFill,
+            AVVideoCompressionPropertiesKey: [
+                AVVideoAverageBitRateKey: videoBitRate,
+                AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
+                AVVideoMaxKeyFrameIntervalKey: 60,
+            ],
+        ])
+        input.transform = transform
+        input.expectsMediaDataInRealTime = false
+        guard writer.canAdd(input) else { throw AppError("Could not prepare the clip") }
+        writer.add(input)
+
+        guard reader.startReading(), writer.startWriting() else {
+            throw AppError("Could not prepare the clip: \(writer.error?.localizedDescription ?? reader.error?.localizedDescription ?? "")")
+        }
+        let flag = Flag()
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            input.requestMediaDataWhenReady(on: DispatchQueue(label: "kitchenlens.video")) {
+                while input.isReadyForMoreMediaData && !flag.done {
+                    if let buffer = output.copyNextSampleBuffer() {
+                        if !flag.started {
+                            writer.startSession(atSourceTime: CMSampleBufferGetPresentationTimeStamp(buffer))
+                            flag.started = true
+                        }
+                        if !input.append(buffer) { flag.done = true }
+                    } else {
+                        flag.done = true
+                    }
+                    if flag.done {
+                        input.markAsFinished()
+                        cont.resume()
+                        return
+                    }
+                }
+            }
+        }
+        guard reader.status != .failed, flag.started else {
+            writer.cancelWriting()
+            throw AppError("Could not read the clip")
+        }
+        await writer.finishWriting()
+        guard writer.status == .completed else {
+            throw AppError("Could not save the clip: \(writer.error?.localizedDescription ?? "unknown error")")
+        }
+        return url
+    }
+
+    private static func export(track: AVAssetTrack, duration: CMTime) async throws -> URL {
         let composition = AVMutableComposition()
         guard let out = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
             throw AppError("Could not prepare the clip")
         }
         try out.insertTimeRange(CMTimeRange(start: .zero, duration: duration), of: track, at: .zero)
         out.preferredTransform = try await track.load(.preferredTransform)
-
         guard let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPreset1280x720) else {
             throw AppError("Could not prepare the clip")
         }
@@ -139,8 +262,7 @@ enum VideoTools {
         guard exporter.status == .completed else {
             throw AppError("Could not save the clip: \(exporter.error?.localizedDescription ?? "unknown error")")
         }
-        try? FileManager.default.removeItem(at: input)
-        return (url, Int(CMTimeGetSeconds(duration).rounded()))
+        return url
     }
 }
 

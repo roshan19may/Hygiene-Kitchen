@@ -11,6 +11,18 @@ import com.google.firebase.firestore.SetOptions
 import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.StorageMetadata
 import com.kitchenlens.app.util.HygieneScore
+import com.kitchenlens.app.util.ImageTools
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import com.kitchenlens.app.util.KitchenStats
 import com.kitchenlens.app.util.QrLabel
 import kotlinx.coroutines.channels.awaitClose
@@ -80,9 +92,56 @@ class FirebaseRepository : KitchenRepository {
     override suspend fun getKitchen(kitchenId: String): Kitchen =
         parse(db.collection("kitchens").document(kitchenId).get().await())
 
+    // ---------- Fast uploads ----------
+    // 1. Uploads start in the background the moment a photo or clip is captured (prefetch),
+    //    so Save usually finds them already done.
+    // 2. Several files upload at the same time instead of one after another.
+    // 3. Every photo also gets a ~20 KB thumbnail, so reports show previews instantly.
+    // 4. Files are marked cacheable, so a customer's phone downloads each one only once.
+
+    private data class Uploaded(val url: String, val thumb: String)
+
+    private val background = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val pending = ConcurrentHashMap<String, Deferred<Uploaded>>()
+    private val slots = Semaphore(4)
+
+    override fun prefetch(kitchen: Kitchen, file: File, video: Boolean) {
+        val key = file.absolutePath
+        if (pending.containsKey(key)) return
+        pending[key] = background.async { send(kitchen.id, file, video) {} }
+    }
+
+    /** Uses the background upload if one was started (and worked), otherwise uploads now. */
+    private suspend fun uploadMedia(kitchenId: String, file: File, video: Boolean, onProgress: (Float) -> Unit = {}): Uploaded {
+        pending.remove(file.absolutePath)?.let { started ->
+            val done = runCatching { started.await() }.getOrNull()
+            if (done != null) { onProgress(1f); return done }
+        }
+        return send(kitchenId, file, video, onProgress)
+    }
+
+    private suspend fun send(kitchenId: String, file: File, video: Boolean, onProgress: (Float) -> Unit): Uploaded =
+        slots.withPermit {
+            val id = UUID.randomUUID().toString()
+            val base = "kitchens/$kitchenId/logs/$id"
+            if (video) return@withPermit Uploaded(upload(file, "$base.mp4", "video/mp4", onProgress), "")
+            coroutineScope {
+                val thumb = async {
+                    runCatching {
+                        val t = ImageTools.thumbnail(file, file.absoluteFile.parentFile ?: file.absoluteFile)
+                        upload(t, "${base}_t.jpg", "image/jpeg") {}.also { t.delete() }
+                    }.getOrDefault("")
+                }
+                Uploaded(upload(file, "$base.jpg", "image/jpeg", onProgress), thumb.await())
+            }
+        }
+
     private suspend fun upload(file: File, path: String, contentType: String, onProgress: (Float) -> Unit): String {
         val ref = storage.reference.child(path)
-        val meta = StorageMetadata.Builder().setContentType(contentType).build()
+        val meta = StorageMetadata.Builder().setContentType(contentType)
+            // Files never change once uploaded, so browsers may keep them for a year
+            .setCacheControl("public, max-age=31536000, immutable")
+            .build()
         ref.putFile(Uri.fromFile(file), meta)
             .addOnProgressListener { s ->
                 if (s.totalByteCount > 0) onProgress(s.bytesTransferred.toFloat() / s.totalByteCount)
@@ -98,10 +157,8 @@ class FirebaseRepository : KitchenRepository {
     ) {
         val id = UUID.randomUUID().toString()
         val isVideo = mediaType == MediaType.VIDEO
-        val mediaUrl = upload(
-            media, "kitchens/${kitchen.id}/logs/$id.${if (isVideo) "mp4" else "jpg"}",
-            if (isVideo) "video/mp4" else "image/jpeg", onProgress,
-        )
+        val uploaded = uploadMedia(kitchen.id, media, isVideo, onProgress)
+        val mediaUrl = uploaded.url
         val now = System.currentTimeMillis()
 
         val kitchenRef = db.collection("kitchens").document(kitchen.id)
@@ -110,7 +167,8 @@ class FirebaseRepository : KitchenRepository {
             // Spot checks count towards the kitchen rating; they don't replace a hygiene record
             updates["spotAnswers"] = (kitchen.spotAnswers + now).takeLast(60)
         } else {
-            updates["latest.$key"] = publicSummary(now, mediaUrl, mediaType, label, details + mapOf("recordedBy" to staffName.trim().substringBefore(" ")))
+            updates["latest.$key"] = publicSummary(now, mediaUrl, mediaType, label,
+                details + mapOf("recordedBy" to staffName.trim().substringBefore(" ")), mediaThumbs = listOf(uploaded.thumb))
         }
         if (photoHash != null) updates["recentHashes"] = (listOf(photoHash) + kitchen.recentHashes).take(60)
 
@@ -129,21 +187,20 @@ class FirebaseRepository : KitchenRepository {
         photos: Map<String, List<InventoryPhoto>>, bills: List<InventoryBill>,
         onProgress: (Float) -> Unit,
     ) {
-        val batchId = UUID.randomUUID().toString().take(8)
         val total = photos.values.sumOf { it.size } + bills.size
-        var done = 0
-        fun step() { done++; onProgress(done.toFloat() / total) }
+        val done = AtomicInteger(0)
+        fun step() { onProgress(done.incrementAndGet().toFloat() / total) }
 
-        val photoUrls = photos.mapValues { (cat, list) ->
-            list.mapIndexed { i, p ->
-                val safe = cat.replace(Regex("[^A-Za-z]"), "")
-                upload(p.file, "kitchens/${kitchen.id}/logs/${batchId}_${safe}_$i.jpg", "image/jpeg") {}
-                    .also { step() }
-            }
+        // All photos and bills upload at the same time (up to 4 at once)
+        val flat = photos.flatMap { (cat, list) -> list.map { cat to it } }
+        val (photoResults, billResults) = coroutineScope {
+            val p = flat.map { (cat, ph) -> async { cat to uploadMedia(kitchen.id, ph.file, false).also { step() } } }
+            val b = bills.map { bill -> async { uploadMedia(kitchen.id, bill.file, false).also { step() } } }
+            p.awaitAll() to b.awaitAll()
         }
-        val billUrls = bills.mapIndexed { i, b ->
-            upload(b.file, "kitchens/${kitchen.id}/logs/${batchId}_bill_$i.jpg", "image/jpeg") {}.also { step() }
-        }
+        val photoUrls = photoResults.groupBy({ it.first }, { it.second.url })
+        val photoThumbs = photoResults.groupBy({ it.first }, { it.second.thumb })
+        val billUrls = billResults.map { it.url }
 
         val records = buildInventoryRecords(photoUrls, bills, billUrls, supplierType)
         val now = System.currentTimeMillis()
@@ -151,7 +208,9 @@ class FirebaseRepository : KitchenRepository {
         val updates = mutableMapOf<String, Any>()
         val batch = db.batch()
         records.forEach { r ->
-            updates["latest.${r.key}"] = publicSummary(now, r.mediaUrls.first(), MediaType.PHOTO, r.label, r.details + mapOf("recordedBy" to staffName.trim().substringBefore(" ")), r.mediaUrls)
+            updates["latest.${r.key}"] = publicSummary(now, r.mediaUrls.first(), MediaType.PHOTO, r.label,
+                r.details + mapOf("recordedBy" to staffName.trim().substringBefore(" ")), r.mediaUrls,
+                photoThumbs[r.category].orEmpty())
             batch.set(kitchenRef.collection("logs").document(), mapOf(
                 "section" to Section.INVENTORY.name, "key" to r.key, "staffName" to staffName.trim(),
                 "mediaType" to MediaType.PHOTO.value, "mediaUrl" to r.mediaUrls.first(), "mediaUrls" to r.mediaUrls,
@@ -174,7 +233,10 @@ class FirebaseRepository : KitchenRepository {
         var code = QrLabel.newCode()
         repeat(3) { if (db.collection("orders").document(code).get().await().exists()) code = QrLabel.newCode() }
 
-        val clipUrl = upload(clip, "kitchens/${kitchen.id}/orders/$code.mp4", "video/mp4", onProgress)
+        // Usually already uploaded in the background while the packer filled in the form
+        val clipUrl = pending.remove(clip.absolutePath)?.let { started -> runCatching { started.await().url }.getOrNull() }
+            ?.also { onProgress(1f) }
+            ?: upload(clip, "kitchens/${kitchen.id}/orders/$code.mp4", "video/mp4", onProgress)
         val fresh = getKitchen(kitchen.id) // latest hygiene state at the moment of packing
         val now = System.currentTimeMillis()
         val tempOk = HygieneScore.temperatureOk(foodType, tempC)

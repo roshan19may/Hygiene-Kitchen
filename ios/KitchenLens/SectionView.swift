@@ -52,15 +52,19 @@ struct SectionView: View {
             do {
                 switch result {
                 case .photo(let image):
-                    let (url, hash) = try ImageTools.process(image)
+                    let (url, hash) = try await Task.detached(priority: .userInitiated) { try ImageTools.process(image) }.value
                     if ImageTools.isDuplicate(hash, recent: model.kitchen?.recentHashes ?? []) {
                         error = "This photo looks the same as an earlier upload. Please take a fresh photo."
-                    } else { file = url; photoHash = hash; error = nil }
+                    } else {
+                        file = url; photoHash = hash; error = nil
+                        if let k = model.kitchen { model.repo.prefetch(k, file: url, video: false) }   // start uploading now
+                    }
                 case .video(let raw):
                     let started = nowMs()
                     let (url, secs) = try await VideoTools.removeAudio(raw)
                     if secs < 5 { error = "Too short. Record at least 5 seconds."; return }
                     file = url; seconds = secs; capturedAt = started - Int64(secs) * 1000; error = nil
+                    if let k = model.kitchen { model.repo.prefetch(k, file: url, video: true) }
                 }
             } catch { self.error = error.localizedDescription }
         }
@@ -158,7 +162,7 @@ struct SectionView: View {
                     Text(section == .PEST ? "Service report photo (8 points)" : section == .SPOT ? "Spot-check clip (about 10 s, no sound)"
                          : section == .STAFF ? "Hand-wash and kit video (10 points; 5–20 s, no sound)" : "Wash video (10 points; 5–20 s, no sound)").font(.subheadline.weight(.semibold))
                     if let f = file {
-                        if section.media == .photo, let img = UIImage(contentsOfFile: f.path) {
+                        if section.media == .photo, let img = ImageTools.preview(f, maxPixel: 900) {
                             Image(uiImage: img).resizable().scaledToFill().frame(height: 200).frame(maxWidth: .infinity).clipped()
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
                         } else {

@@ -34,7 +34,10 @@ struct InventoryView: View {
         Task {
             defer { working = false }
             do {
-                let (url, hash) = try ImageTools.process(image)
+                // Resize and stamp off the main thread so the screen stays smooth; bills keep more detail for reading
+                let side: CGFloat = t == "__BILL__" ? 1600 : ImageTools.maxSide
+                let (url, hash) = try await Task.detached(priority: .userInitiated) { try ImageTools.process(image, maxSide: side) }.value
+                if let k = model.kitchen { model.repo.prefetch(k, file: url, video: false) }   // start uploading now
                 if t == "__BILL__" {
                     var bill = InventoryBill(file: url, categories: cats, billDate: "", supplierGstin: "", note: "Reading the bill…")
                     bills.append(bill)
